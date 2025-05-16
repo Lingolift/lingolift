@@ -58,6 +58,10 @@ func (c *LingoLiftConfig) LoadFile(filename string) error {
 
 	c.fillDefault()
 
+	if err = c.Speech.check(); err != nil {
+		return err
+	}
+
 	G = c
 
 	fmt.Println(G.Speech)
@@ -164,4 +168,37 @@ type TencentCloudSpeechConfig struct {
 	SecretKey string `yaml:"secret_key"`
 	Token     string `yaml:"token"`
 	SliceSize int    `yaml:"slice_size"`
+}
+
+// check
+func (c *TencentCloudSpeechConfig) check() error {
+	if len(c.AppID) <= 0 {
+		appId := os.Getenv("app_id")
+		if len(appId) <= 0 {
+			return errors.New("app_id is empty")
+		}
+		c.AppID = appId
+	}
+
+	if len(c.SecretID) <= 0 {
+		secretId := os.Getenv("secret_id")
+		if len(secretId) <= 0 {
+			return errors.New("secret_id is empty")
+		}
+		c.SecretID = secretId
+	}
+
+	if len(c.SecretKey) <= 0 {
+		secretKey := os.Getenv("secret_key")
+		if len(secretKey) <= 0 {
+			return errors.New("secret_key is empty")
+		}
+		c.SecretKey = secretKey
+	}
+
+	if c.SliceSize <= 0 {
+		c.SliceSize = 2000
+	}
+
+	return nil
 }
