@@ -410,18 +410,94 @@
                 },
 
                 async checkPermissions() {
-                    try {
-                        const permission = await navigator.permissions.query({ name: 'microphone' });
-                        if (permission.state === 'denied') {
-                            alert('请在浏览器设置中允许麦克风访问权限');
-                            return false;
+                        try {
+                            // 检测是否为iPhone设备
+                            const isIPhone = /iPhone/.test(navigator.platform) || 
+                                            (navigator.userAgent.includes('Mac') && 'ontouchend' in document);
+                            
+                            // 检测是否为Safari浏览器
+                            const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+                            
+                            // iPhone上的Safari特殊处理
+                            if (isIPhone && isSafari) {
+                                try {
+                                    // iPhone上必须在用户交互（如点击）后调用
+                                    // 这里假设已经在点击事件处理函数中
+                                    
+                                    // 尝试访问媒体设备
+                                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                                    
+                                    // 成功获取流后释放
+                                    stream.getTracks().forEach(track => track.stop());
+                                    
+                                    // 保存权限状态（可选）
+                                    localStorage.setItem('microphonePermission', 'granted');
+                                    
+                                    return true;
+                                } catch (err) {
+
+                                    alert(err);
+                                    console.error('iPhone麦克风权限被拒绝:', err);
+                                    
+                                    // 显示自定义提示，引导用户到设置页面
+                                    const isPermissionDenied = err.name === 'NotAllowedError';
+                                    if (isPermissionDenied) {
+                                        alert('请在设置 > Safari > 网站设置 > 麦克风 中允许本网站访问麦克风');
+                                    } else {
+                                        alert('无法访问麦克风，请确保您的设备有麦克风并且未被禁用');
+                                    }
+                                    
+                                    // 保存权限状态（可选）
+                                    localStorage.setItem('microphonePermission', 'denied');
+                                    return false;
+                                }
+                            }
+                            
+                            // 苹果电脑(Mac)上的Safari处理
+                            const isMacSafari = /Mac/.test(navigator.platform) && isSafari;
+                            if (isMacSafari) {
+                                try {
+                                    // 尝试使用标准权限API
+                                    const permission = await navigator.permissions.query({ name: 'microphone' });
+                                    
+                                    // 如果权限已授予或提示
+                                    if (permission.state === 'granted' || permission.state === 'prompt') {
+                                        return true;
+                                    }
+                                    
+                                    // 如果权限被拒绝
+                                    if (permission.state === 'denied') {
+                                        alert('请在Safari设置中允许麦克风访问权限');
+                                        return false;
+                                    }
+                                } catch (error) {
+                                    // 标准API失败时，回退到getUserMedia
+                                    console.log('标准权限API失败，回退到getUserMedia方法');
+                                    try {
+                                        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                                        stream.getTracks().forEach(track => track.stop());
+                                        return true;
+                                    } catch (err) {
+                                        console.error('Mac上的Safari麦克风权限被拒绝:', err);
+                                        alert('请在Safari设置中允许麦克风访问权限');
+                                        return false;
+                                    }
+                                }
+                            }
+                            
+                            // 非苹果设备使用标准权限API
+                            const permission = await navigator.permissions.query({ name: 'microphone' });
+                            if (permission.state === 'denied') {
+                                alert('请在浏览器设置中允许麦克风访问权限');
+                                return false;
+                            }
+                            return true;
+                        } catch (error) {
+                            console.error('检查麦克风权限失败:', error);
+                            // 无法检查权限，继续尝试
+                            return true;
                         }
-                        return true;
-                    } catch (error) {
-                        console.error('检查麦克风权限失败:', error);
-                        return true; // 无法检查权限，继续尝试
-                    }
-                },
+                    },
 
                 stop() {
                     this.isRecording = false;
@@ -535,20 +611,44 @@
 
                 // 获取支持的MIME类型
                 getSupportedMimeType() {
-                    const possibleTypes = [
+                    // 检测是否为苹果设备
+                    const isAppleDevice = /Mac|iPhone|iPod|iPad/.test(navigator.platform);
+                    // 检测是否为Safari或WebKit浏览器
+                    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+                    const isWebKit = /WebKit/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
+
+                    // 针对苹果PC和iPhone的特殊处理
+                    if (isAppleDevice && (isSafari || isWebKit)) {
+                        // 优先检测苹果设备更支持的MIME类型
+                        const appleTypes = [
+                            'audio/mp4',
+                            'audio/mpeg',
+                            'audio/x - m4a'
+                        ];
+
+                        for (const type of appleTypes) {
+                            if (MediaRecorder.isTypeSupported(type)) {
+                                console.log(`苹果设备支持的MIME类型: ${type}`);
+                                return type;
+                            }
+                        }
+                    }
+
+                    // 通用类型检测
+                    const commonTypes = [
                         'audio/webm;codecs=opus',
                         'audio/webm',
                         'audio/ogg;codecs=opus',
                         'audio/wav'
                     ];
-                    
-                    for (const type of possibleTypes) {
+
+                    for (const type of commonTypes) {
                         if (MediaRecorder.isTypeSupported(type)) {
                             console.log(`支持的MIME类型: ${type}`);
                             return type;
                         }
                     }
-                    
+
                     console.error('没有找到支持的MIME类型');
                     return null;
                 },
@@ -1003,4 +1103,3 @@
     </script>
 </body>
 </html>
-    
