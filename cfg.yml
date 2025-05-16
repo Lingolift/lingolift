@@ -1,0 +1,11 @@
+app_conf:
+  http_conf:
+    address: ":8080"
+    read_timeout: 10
+  log_conf:
+    app_name: "access"
+    filename: "/data/logs/cloud-monitor/lingolift"
+    max_size: 512
+    max_days: 10
+    max_backups: 100
+

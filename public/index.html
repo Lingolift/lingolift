@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>语音评测系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#10B981',
+                        accent: '#F59E0B',
+                        danger: '#EF4444',
+                        "socket-connected": "#059669",
+                        "socket-disconnected": "#dc2626"
+                    },
+                    fontFamily: {
+                        inter: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .audio-meter {
+                height: 10px;
+                background-color: #e5e7eb;
+                border-radius: 5px;
+            }
+            .audio-level {
+                height: 100%;
+                background-color: #3B82F6;
+                transition: width 0.1s ease;
+            }
+            .pulse {
+                animation: pulse 2s infinite;
+            }
+            @keyframes pulse {
+                0% { opacity: 1; }
+                50% { opacity: 0.5; }
+                100% { opacity: 1; }
+            }
+            .play-controls {
+                opacity: 0;
+                transform: translateY(10px);
+                transition: all 0.3s ease;
+            }
+            .play-controls.visible {
+                opacity: 1;
+                transform: translateY(0);
+            }
+            .progress-bar-container {
+                height: 4px;
+                background-color: #e5e7eb;
+                border-radius: 2px;
+                cursor: pointer;
+            }
+            .progress-bar {
+                height: 100%;
+                background-color: #3B82F6;
+                border-radius: 2px;
+                transition: width 0.1s ease;
+            }
+            .word-item {
+                transition: all 0.3s ease;
+            }
+            .word-item:hover {
+                transform: translateX(5px);
+            }
+            .score-badge {
+                transition: all 0.3s ease;
+            }
+            .score-badge:hover {
+                transform: scale(1.1);
+            }
+            .floating {
+                animation: floating 3s ease-in-out infinite;
+            }
+            @keyframes floating {
+                0% { transform: translateY(0px); }
+                50% { transform: translateY(-5px); }
+                100% { transform: translateY(0px); }
+            }
+            .scale-in {
+                animation: scaleIn 0.5s ease-out forwards;
+            }
+            @keyframes scaleIn {
+                0% { transform: scale(0.9); opacity: 0; }
+                100% { transform: scale(1); opacity: 1; }
+            }
+        }
+    </style>
+</head>
+<body class="font-inter bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <!-- 状态指示栏 -->
+        <div id="statusBar" class="bg-white rounded-lg shadow-md p-3 mb-6 flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+                <div id="socketStatus" class="w-6 h-6 rounded-full bg-socket-disconnected"></div>
+                <span id="socketStatusText" class="text-sm text-gray-600">WebSocket 未连接</span>
+            </div>
+            <div class="audio-meter" id="audioMeter">
+                <div class="audio-level" id="audioLevel"></div>
+            </div>
+        </div>
+
+        <header class="text-center mb-10">
+            <div class="inline-block relative">
+                <h1 class="text-[clamp(1.8rem,4vw,2.5rem)] font-bold text-primary mb-4">
+                    语音评测系统
+                    <span class="inline-block w-2 h-2 bg-primary rounded-full floating ml-1"></span>
+                </h1>
+                <div class="absolute -bottom-1 left-0 w-full h-1 bg-primary/30 rounded-full"></div>
+            </div>
+            <p class="text-gray-600 text-lg">
+                使用腾讯云智聆口语评测技术，实时分析您的发音准确性和流利度
+            </p>
+        </header>
+        
+        <main class="bg-white rounded-xl shadow-xl p-6 md:p-8 mb-8 transition-all duration-300 hover:shadow-2xl">
+            <div class="mb-8">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                    <i class="fa fa-cog text-primary mr-2"></i> 评测配置
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="referenceText" class="block text-sm font-medium text-gray-700 mb-1">
+                            参考文本
+                        </label>
+                        <textarea 
+                            id="referenceText" 
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all resize-none"
+                            placeholder="输入需要评测的文本..."
+                            rows="4"
+                            required
+                        >beautiful</textarea>
+                        <div class="text-xs text-gray-500 mt-1">请输入要评测的单词或句子</div>
+                    </div>
+                    <div>
+                        <label for="engineType" class="block text-sm font-medium text-gray-700 mb-1">
+                            引擎类型
+                        </label>
+                        <select 
+                            id="engineType" 
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all"
+                        >
+                            <option value="16k_en">16k英文</option>
+                            <option value="8k_en">8k英文</option>
+                            <option value="16k_cn">16k中文</option>
+                            <option value="8k_cn">8k中文</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex flex-col items-center justify-center mb-8">
+                <button 
+                    id="recordButton" 
+                    class="bg-gradient-to-r from-primary to-blue-700 text-white px-8 py-4 rounded-full shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1 focus:outline-none focus:ring-4 focus:ring-primary/30 flex items-center"
+                >
+                    <i class="fa fa-microphone mr-2 text-xl"></i>
+                    <span>开始录音</span>
+                </button>
+                
+                <!-- 新增播放控件 -->
+                <div id="playControls" class="play-controls mt-6 w-full max-w-md">
+                    <div class="flex items-center justify-between mb-2">
+                        <span id="currentTime" class="text-xs text-gray-500">0:00</span>
+                        <span id="duration" class="text-xs text-gray-500">-0:00</span>
+                    </div>
+                    <div class="progress-bar-container mb-3 group relative overflow-hidden" id="progressBarContainer">
+                        <div class="progress-bar" id="playProgressBar"></div>
+                        <div class="absolute inset-0 bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    </div>
+                    <div class="flex items-center justify-center space-x-6">
+                        <button 
+                            id="playButton" 
+                            class="w-14 h-14 bg-primary text-white rounded-full shadow-md flex items-center justify-center hover:bg-primary/90 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled
+                        >
+                            <i class="fa fa-play text-xl"></i>
+                        </button>
+                        <button 
+                            id="downloadButton" 
+                            class="w-14 h-14 bg-gray-200 text-gray-700 rounded-full shadow-md flex items-center justify-center hover:bg-gray-300 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled
+                        >
+                            <i class="fa fa-download text-xl"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="statusDisplay" class="mt-8 text-center hidden scale-in">
+                    <div id="statusText" class="text-gray-700 text-lg mb-2 flex items-center justify-center">
+                        <i class="fa fa-circle-o-notch fa-spin mr-2"></i>
+                        <span>准备就绪</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5 mb-4 overflow-hidden">
+                        <div id="progressBar" class="bg-primary h-2.5 rounded-full w-0 transition-all duration-300"></div>
+                    </div>
+                    
+                    <div id="scoreDisplay" class="mt-6 grid grid-cols-3 gap-4 w-full max-w-md">
+                        <div class="bg-gray-50 p-4 rounded-lg shadow-sm hover:shadow transition-shadow">
+                            <div class="text-sm text-gray-500 mb-1">总体得分</div>
+                            <div id="overallScore" class="text-2xl font-bold text-primary">-</div>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded-lg shadow-sm hover:shadow transition-shadow">
+                            <div class="text-sm text-gray-500 mb-1">发音准确度</div>
+                            <div id="accuracyScore" class="text-2xl font-bold text-secondary">-</div>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded-lg shadow-sm hover:shadow transition-shadow">
+                            <div class="text-sm text-gray-500 mb-1">流利度</div>
+                            <div id="fluencyScore" class="text-2xl font-bold text-accent">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="resultContainer" class="mb-8 opacity-0 transition-opacity duration-500">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                    <i class="fa fa-list-alt text-primary mr-2"></i> 详细结果
+                </h2>
+                
+                <div class="bg-gray-50 p-4 rounded-lg shadow-sm">
+                    <div class="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                        <i class="fa fa-comment-o mr-1"></i> 单词分析
+                    </div>
+                    <div id="wordsAnalysis" class="space-y-2">
+                        <!-- 结果将在这里动态生成 -->
+                    </div>
+                </div>
+                
+                <div class="mt-4 bg-gray-50 p-4 rounded-lg shadow-sm">
+                    <div class="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                        <i class="fa fa-lightbulb-o mr-1"></i> 改进建议
+                    </div>
+                    <div id="suggestions" class="text-gray-700 space-y-2">
+                        <!-- 建议将在这里动态生成 -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 新增音频分析区域 -->
+            <div class="mt-8 bg-gray-50 p-4 rounded-lg shadow-sm">
+                <h3 class="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                    <i class="fa fa-area-chart mr-1"></i> 实时音频分析
+                </h3>
+                <canvas id="audioVisualizer" class="w-full h-24 bg-gray-200 rounded-lg"></canvas>
+            </div>
+        </main>
+        
+        <footer class="text-center text-gray-500 text-sm mt-8">
+            <p>© 2025 语音评测系统 | 使用腾讯云智聆口语评测技术</p>
+        </footer>
+    </div>
+    
+    <script>
+        // 全局变量管理
+        let audioContext = null;
+        let analyser = null;
+        let mediaStream = null;
+        let socketReconnectTimer = null;
+        const RECONNECT_INTERVAL = 5000; // 5秒重连间隔
+        
+        // 新增：录音播放相关变量
+        let audioBlob = null;
+        let audioUrl = null;
+        let audioElement = null;
+        let isPlaying = false;
+        let audioBuffer = null;
+        let audioSource = null;
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            // 获取DOM元素引用
+            const recordButton = document.getElementById('recordButton');
+            const socketStatus = document.getElementById('socketStatus');
+            const socketStatusText = document.getElementById('socketStatusText');
+            const audioVisualizer = document.getElementById('audioVisualizer');
+            const audioLevel = document.getElementById('audioLevel');
+            const statusText = document.getElementById('statusText');
+            const progressBar = document.getElementById('progressBar');
+            const resultContainer = document.getElementById('resultContainer');
+            const referenceText = document.getElementById('referenceText');
+            const engineType = document.getElementById('engineType');
+            const overallScore = document.getElementById('overallScore');
+            const accuracyScore = document.getElementById('accuracyScore');
+            const fluencyScore = document.getElementById('fluencyScore');
+            const wordsAnalysis = document.getElementById('wordsAnalysis');
+            const suggestions = document.getElementById('suggestions');
+            
+            // 新增：获取播放控件引用
+            const playControls = document.getElementById('playControls');
+            const playButton = document.getElementById('playButton');
+            const downloadButton = document.getElementById('downloadButton');
+            const progressBarContainer = document.getElementById('progressBarContainer');
+            const playProgressBar = document.getElementById('playProgressBar');
+            const currentTime = document.getElementById('currentTime');
+            const duration = document.getElementById('duration');
+            
+            // 初始化WebSocket管理器
+            const socketManager = {
+                socket: null,
+                connect() {
+                    if (this.socket && this.socket.readyState === WebSocket.OPEN) return;
+                    
+                    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                    this.socket = new WebSocket(`${protocol}//${window.location.host}/ws/assessment`);
+
+                    const self = this; // 保存对this的引用
+
+                    this.socket.onopen = () => {
+                        socketStatus.style.backgroundColor = '#059669';
+                        socketStatusText.textContent = 'WebSocket 已连接';
+                        self.sendConfig();
+                        self.autoReconnectClear();
+                    };
+
+                    this.socket.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            processServerMessage(data);
+                        } catch (error) {
+                            console.error('解析服务器消息失败:', error);
+                        }
+                    };
+
+                    this.socket.onclose = (event) => {
+                        socketStatus.style.backgroundColor = '#dc2626';
+                        socketStatusText.textContent = `WebSocket 断开 (${event.code})`;
+                    };
+
+                    this.socket.onerror = (error) => {
+                        console.error('WebSocket 错误:', error);
+                        self.socket.close();
+                    };
+                },
+
+                sendConfig() {
+                    const config = {
+                        ref_text: referenceText.value.trim(),
+                        server_engine_type: engineType.value
+                    };
+                    if (config.ref_text) this.socket.send(JSON.stringify(config));
+                },
+
+                sendAudioData(data) {
+                    if (this.socket?.readyState === WebSocket.OPEN) {
+                        // 确保音频数据长度为偶数
+                        if (data instanceof ArrayBuffer && data.byteLength % 2 !== 0) {
+                            const view = new Uint8Array(data);
+                            const newData = new Uint8Array(data.byteLength + 1);
+                            newData.set(view);
+                            newData[data.byteLength] = 0; // 补零
+                            data = newData.buffer;
+                            console.log(`补全音频数据: ${data.byteLength}`);
+                        }
+                        this.socket.send(data);
+                    }
+                },
+                
+                autoReconnectClear() {
+                    clearTimeout(socketReconnectTimer);
+                },
+
+                close() {
+                    this.socket?.close();
+                    this.autoReconnectClear();
+                }
+            };
+
+            // 录音管理器
+            const recordingManager = {
+                isRecording: false,
+                mediaRecorder: null,
+                audioInput: null,
+                mimeType: null,
+                audioChunks: [], // 新增：存储录音数据块
+                
+                async start() {
+                    if (!await this.checkPermissions()) return;
+                    if (!this.initAudioContext()) return;
+                    if (!await this.requestMicrophonePermission()) return;
+                    
+                    this.isRecording = true;
+                    recordButton.classList.remove('from-primary', 'to-blue-700');
+                    recordButton.classList.add('from-danger', 'to-red-700');
+                    recordButton.innerHTML = '<i class="fa fa-stop mr-2 text-xl"></i><span>停止录音</span>';
+                    statusText.innerHTML = '<i class="fa fa-microphone mr-2"></i><span>正在录音...</span>';
+                    progressBar.style.width = '50%';
+                    progressBar.classList.add('pulse');
+                    statusDisplay.classList.remove('hidden');
+                    
+                    // 重置结果区域
+                    this.resetResultDisplay();
+                    
+                    // 重置录音数据
+                    this.audioChunks = [];
+                    
+                    // 隐藏播放控件
+                    playControls.classList.remove('visible');
+                    
+                    // 启动音频可视化
+                    this.startVisualization();
+                },
+
+                async checkPermissions() {
+                    try {
+                        const permission = await navigator.permissions.query({ name: 'microphone' });
+                        if (permission.state === 'denied') {
+                            alert('请在浏览器设置中允许麦克风访问权限');
+                            return false;
+                        }
+                        return true;
+                    } catch (error) {
+                        console.error('检查麦克风权限失败:', error);
+                        return true; // 无法检查权限，继续尝试
+                    }
+                },
+
+                stop() {
+                    this.isRecording = false;
+                    recordButton.classList.remove('from-danger', 'to-red-700');
+                    recordButton.classList.add('from-primary', 'to-blue-700');
+                    recordButton.innerHTML = '<i class="fa fa-microphone mr-2 text-xl"></i><span>开始录音</span>';
+                    statusText.innerHTML = '<i class="fa fa-cog fa-spin mr-2"></i><span>录音已停止，正在处理...</span>';
+                    progressBar.style.width = '75%';
+                    progressBar.classList.remove('pulse');
+                    
+                    // 停止音频可视化
+                    this.stopVisualization();
+                    
+                    // 结束录音并发送终止信号
+                    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+                        // 先发送结束标志
+                        socketManager.sendAudioData(JSON.stringify({type: "end"}));
+                        
+                        // 然后停止录音
+                        this.mediaRecorder.stop();
+                    }
+                },
+
+                initAudioContext() {
+                    try {
+                        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                        analyser = audioContext.createAnalyser();
+                        analyser.fftSize = 2048;
+                        return true;
+                    } catch (error) {
+                        console.error('初始化 AudioContext 失败:', error);
+                        statusText.innerHTML = '<i class="fa fa-exclamation-triangle mr-2"></i><span>浏览器不支持音频处理功能</span>';
+                        statusText.classList.add('text-danger');
+                        return false;
+                    }
+                },
+
+                requestMicrophonePermission() {
+                    // 检测支持的MIME类型
+                    this.mimeType = this.getSupportedMimeType();
+                    if (!this.mimeType) {
+                        statusText.innerHTML = '<i class="fa fa-exclamation-triangle mr-2"></i><span>浏览器不支持任何可用的音频格式</span>';
+                        statusText.classList.add('text-danger');
+                        return false;
+                    }
+                    
+                    return navigator.mediaDevices.getUserMedia({ audio: true })
+                        .then(stream => {
+                            mediaStream = stream;
+                            this.audioInput = audioContext.createMediaStreamSource(stream);
+                            this.audioInput.connect(analyser);
+                            
+                            // 创建 MediaRecorder
+                            try {
+                                this.mediaRecorder = new MediaRecorder(stream, {
+                                    mimeType: this.mimeType,
+                                    audioBitsPerSecond: 128000
+                                });
+                            } catch (error) {
+                                console.error('创建 MediaRecorder 失败:', error);
+                                statusText.innerHTML = '<i class="fa fa-exclamation-triangle mr-2"></i><span>无法初始化录音功能</span>';
+                                statusText.classList.add('text-danger');
+                                this.cleanup();
+                                return false;
+                            }
+                            
+                            // 新增：收集录音数据
+                            this.mediaRecorder.ondataavailable = (event) => {
+                                if (event.data.size > 0) {
+                                    this.audioChunks.push(event.data);
+                                    
+                                    // 转换为ArrayBuffer并发送
+                                    event.data.arrayBuffer().then(arrayBuffer => {
+                                        socketManager.sendAudioData(arrayBuffer);
+                                        
+                                        // 更新音频电平
+                                        const audioLevelValue = this.getAudioLevel();
+                                        audioLevel.style.width = `${audioLevelValue}%`;
+                                    });
+                                }
+                            };
+                            
+                            this.mediaRecorder.onstop = () => {
+                                console.log('MediaRecorder 已停止');
+                                
+                                // 新增：处理录音完成
+                                this.processRecording();
+                                
+                                stream.getTracks().forEach(track => track.stop());
+                                this.cleanup();
+                            };
+                            
+                            this.mediaRecorder.onerror = (error) => {
+                                console.error('MediaRecorder 错误:', error);
+                                statusText.innerHTML = `<i class="fa fa-exclamation-triangle mr-2"></i><span>录音错误: ${error.message}</span>`;
+                                statusText.classList.add('text-danger');
+                                this.cleanup();
+                            };
+                            
+                            this.mediaRecorder.start(100); // 100ms 数据块间隔
+                            return true;
+                        })
+                        .catch(error => {
+                            console.error('麦克风权限获取失败:', error);
+                            statusText.innerHTML = '<i class="fa fa-exclamation-triangle mr-2"></i><span>请允许访问麦克风</span>';
+                            statusText.classList.add('text-danger');
+                            this.cleanup();
+                            return false;
+                        });
+                },
+
+                // 获取支持的MIME类型
+                getSupportedMimeType() {
+                    const possibleTypes = [
+                        'audio/webm;codecs=opus',
+                        'audio/webm',
+                        'audio/ogg;codecs=opus',
+                        'audio/wav'
+                    ];
+                    
+                    for (const type of possibleTypes) {
+                        if (MediaRecorder.isTypeSupported(type)) {
+                            console.log(`支持的MIME类型: ${type}`);
+                            return type;
+                        }
+                    }
+                    
+                    console.error('没有找到支持的MIME类型');
+                    return null;
+                },
+
+                startVisualization() {
+                    const canvasCtx = audioVisualizer.getContext('2d');
+                    const bufferLength = analyser.frequencyBinCount;
+                    const dataArray = new Uint8Array(bufferLength);
+                    
+                    // 设置Canvas尺寸
+                    const resizeCanvas = () => {
+                        audioVisualizer.width = audioVisualizer.offsetWidth;
+                        audioVisualizer.height = audioVisualizer.offsetHeight;
+                    };
+                    
+                    resizeCanvas();
+                    window.addEventListener('resize', resizeCanvas);
+                    
+                    // 绘制背景
+                    const drawBackground = () => {
+                        canvasCtx.fillStyle = 'rgb(230, 230, 230)';
+                        canvasCtx.fillRect(0, 0, audioVisualizer.width, audioVisualizer.height);
+                    };
+                    
+                    // 绘制频谱图
+                    function visualize() {
+                        drawBackground();
+                        
+                        analyser.getByteFrequencyData(dataArray);
+                        
+                        const barWidth = (audioVisualizer.width / bufferLength) * 2.5;
+                        let x = 0;
+                        
+                        for (let i = 0; i < bufferLength; i++) {
+                            const barHeight = (dataArray[i] / 255) * audioVisualizer.height;
+                            
+                            // 渐变颜色
+                            const hue = (i / bufferLength) * 240;
+                            canvasCtx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+                            
+                            canvasCtx.fillRect(x, audioVisualizer.height - barHeight, barWidth, barHeight);
+                            
+                            x += barWidth + 1;
+                        }
+                        
+                        requestAnimationFrame(visualize);
+                    }
+                    
+                    visualize();
+                },
+
+                stopVisualization() {
+                    audioContext?.suspend();
+                },
+
+                getAudioLevel() {
+                    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+                    analyser.getByteTimeDomainData(dataArray);
+                    
+                    let sum = 0;
+                    dataArray.forEach(value => {
+                        sum += Math.pow(value - 128, 2);
+                    });
+                    
+                    const rms = Math.sqrt(sum / dataArray.length);
+                    return Math.min(rms * 2, 100); // 限制在0-100%
+                },
+
+                resetResultDisplay() {
+                    resultContainer.style.opacity = '0';
+                    overallScore.textContent = '-';
+                    accuracyScore.textContent = '-';
+                    fluencyScore.textContent = '-';
+                    wordsAnalysis.innerHTML = '';
+                    suggestions.innerHTML = '';
+                },
+
+                cleanup() {
+                    console.log('清理录音资源');
+                    this.mediaRecorder = null;
+                    this.audioInput?.disconnect();
+                    mediaStream?.getTracks().forEach(track => track.stop());
+                    audioContext?.close();
+                    audioContext = null;
+                },
+                
+                // 新增：处理录音完成
+                processRecording() {
+                    if (this.audioChunks.length === 0) {
+                        console.warn('没有录音数据');
+                        statusText.innerHTML = '<i class="fa fa-exclamation-triangle mr-2"></i><span>没有检测到录音数据</span>';
+                        statusText.classList.add('text-danger');
+                        progressBar.style.width = '0%';
+                        return;
+                    }
+                    
+                    // 创建音频Blob
+                    audioBlob = new Blob(this.audioChunks, { type: this.mimeType });
+                    
+                    // 创建音频URL
+                    audioUrl = URL.createObjectURL(audioBlob);
+                    
+                    // 初始化音频元素
+                    this.initAudioElement();
+                    
+                    // 显示播放控件
+                    this.showPlayControls();
+                },
+                
+                // 新增：初始化音频元素
+                initAudioElement() {
+                    // 如果已有音频元素，先释放资源
+                    if (audioElement) {
+                        audioElement.pause();
+                        audioElement = null;
+                    }
+                    
+                    // 创建新的音频元素
+                    audioElement = new Audio(audioUrl);
+                    
+                    // 设置音频元数据加载完成时的回调
+                    audioElement.onloadedmetadata = () => {
+                        // 更新音频时长显示
+                        const durationText = formatTime(audioElement.duration);
+                        duration.textContent = `-${durationText}`;
+                    };
+                    
+                    // 设置播放位置更新时的回调
+                    audioElement.ontimeupdate = () => {
+                        this.updatePlayProgress();
+                    };
+                    
+                    // 设置播放结束时的回调
+                    audioElement.onended = () => {
+                        this.onPlayEnd();
+                    };
+                    
+                    // 设置播放错误时的回调
+                    audioElement.onerror = () => {
+                        console.error('音频播放错误:', audioElement.error);
+                        statusText.innerHTML = '<i class="fa fa-exclamation-triangle mr-2"></i><span>音频播放错误</span>';
+                        statusText.classList.add('text-danger');
+                        this.onPlayEnd();
+                    };
+                },
+                
+                // 新增：显示播放控件
+                showPlayControls() {
+                    playControls.classList.add('visible');
+                    playButton.disabled = false;
+                    downloadButton.disabled = false;
+                },
+                
+                // 新增：更新播放进度
+                updatePlayProgress() {
+                    if (!audioElement) return;
+                    
+                    const percent = (audioElement.currentTime / audioElement.duration) * 100;
+                    playProgressBar.style.width = `${percent}%`;
+                    
+                    // 更新当前时间显示
+                    const currentTimeText = formatTime(audioElement.currentTime);
+                    currentTime.textContent = currentTimeText;
+                },
+                
+                // 新增：播放结束处理
+                onPlayEnd() {
+                    isPlaying = false;
+                    playButton.innerHTML = '<i class="fa fa-play text-xl"></i>';
+                    playProgressBar.style.width = '0%';
+                    currentTime.textContent = '0:00';
+                }
+            };
+            
+            // 新增：格式化时间为 MM:SS 格式
+            function formatTime(seconds) {
+                if (isNaN(seconds)) return '0:00';
+                
+                const minutes = Math.floor(seconds / 60);
+                const remainingSeconds = Math.floor(seconds % 60);
+                
+                return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+            }
+            
+            // 新增：播放/暂停录音
+            function togglePlay() {
+                if (!audioElement) return;
+                
+                if (isPlaying) {
+                    // 暂停播放
+                    audioElement.pause();
+                    playButton.innerHTML = '<i class="fa fa-play text-xl"></i>';
+                } else {
+                    // 开始播放
+                    audioElement.play().then(() => {
+                        playButton.innerHTML = '<i class="fa fa-pause text-xl"></i>';
+                    }).catch(error => {
+                        console.error('播放失败:', error);
+                        statusText.innerHTML = `<i class="fa fa-exclamation-triangle mr-2"></i><span>播放失败: ${error.message}</span>`;
+                        statusText.classList.add('text-danger');
+                    });
+                }
+                
+                isPlaying = !isPlaying;
+            }
+            
+            // 新增：下载录音
+            function downloadAudio() {
+                if (!audioBlob) return;
+                
+                const url = URL.createObjectURL(audioBlob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `recording_${new Date().toISOString().replace(/[:.]/g, '-')}.${audioBlob.type.split('/')[1] || 'webm'}`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+            
+            // 新增：跳转到播放位置
+            function seekToPosition(event) {
+                if (!audioElement) return;
+                
+                const rect = progressBarContainer.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const percent = x / rect.width;
+                const seekTime = percent * audioElement.duration;
+                
+                audioElement.currentTime = seekTime;
+            }
+
+            // 处理服务器消息
+            function processServerMessage(data) {
+                console.log('收到服务器消息:', data);
+                
+                switch (data.status) {
+                    case 'start':
+                        statusText.innerHTML = '<i class="fa fa-cog fa-spin mr-2"></i><span>开始评测...</span>';
+                        break;
+                        
+                    case 'intermediate':
+                        // 更新中间结果
+                        updateResults(data.result);
+                        statusText.innerHTML = '<i class="fa fa-cog fa-spin mr-2"></i><span>正在分析...</span>';
+                        break;
+                        
+                    case 'complete':
+                        // 更新最终结果
+                        updateResults(data.result);
+                        statusText.innerHTML = '<i class="fa fa-check mr-2"></i><span>评测完成</span>';
+                        progressBar.style.width = '100%';
+                        progressBar.classList.remove('pulse');
+                        progressBar.classList.add('bg-secondary');
+                        
+                        // 显示结果区域
+                        setTimeout(() => {
+                            resultContainer.style.opacity = '1';
+                        }, 500);
+                        break;
+                        
+                    case 'error':
+                        console.error('评测错误:', data.error);
+                        statusText.innerHTML = `<i class="fa fa-exclamation-triangle mr-2"></i><span>错误: ${data.error}</span>`;
+                        statusText.classList.add('text-danger');
+                        progressBar.style.width = '0%';
+                        recordingManager.cleanup();
+                        break;
+                }
+            }
+            
+            // 更新评测结果
+            function updateResults(result) {
+                if (!result) return;
+                
+                // 安全更新分数
+                const updateScore = (element, value) => {
+                    if (value !== undefined && !isNaN(value) && isFinite(value)) {
+                        element.textContent = value.toFixed(1);
+                    } else {
+                        element.textContent = '-';
+                    }
+                };
+                
+                // 更新分数
+                updateScore(overallScore, result.overall_score);
+                updateScore(accuracyScore, result.pron_accuracy);
+                updateScore(fluencyScore, result.pron_fluency);
+                
+                // 更新单词分析
+                if (result.words && result.words.length > 0) {
+                    updateWordAnalysis(result.words);
+                }
+                
+                // 生成建议
+                generateSuggestions(result);
+            }
+            
+            // 更新单词分析结果
+            function updateWordAnalysis(words) {
+                wordsAnalysis.innerHTML = '';
+                
+                words.forEach((word, index) => {
+                    const wordElement = document.createElement('div');
+                    wordElement.className = 'word-item flex flex-wrap items-center p-2 rounded-lg hover:bg-gray-100 transition-all';
+                    wordElement.style.animation = `scaleIn 0.3s ease-out forwards ${index * 0.1}s`;
+                    wordElement.style.opacity = '0';
+                    
+                    // 单词文本
+                    const wordText = document.createElement('span');
+                    wordText.className = 'font-medium mr-3 text-gray-800';
+                    wordText.textContent = word.W;
+                    
+                    // 音标
+                    const phonetic = document.createElement('span');
+                    phonetic.className = 'text-sm text-gray-500 mr-3';
+                    phonetic.textContent = word.P;
+                    
+                    // 得分
+                    const score = document.createElement('span');
+                    const scoreValue = parseFloat(word.S);
+                    score.className = `score-badge px-2 py-1 rounded-full text-xs font-semibold ${getScoreColorClass(scoreValue)}`;
+                    score.textContent = scoreValue.toFixed(1);
+                    
+                    wordElement.appendChild(wordText);
+                    wordElement.appendChild(phonetic);
+                    wordElement.appendChild(score);
+                    
+                    wordsAnalysis.appendChild(wordElement);
+                });
+            }
+            
+            // 生成建议
+            function generateSuggestions(result) {
+                suggestions.innerHTML = '';
+                
+                if (!result.words || result.words.length === 0) return;
+                
+                // 查找发音较差的单词
+                const lowScoreWords = result.words.filter(word => parseFloat(word.S) < 70);
+                
+                if (lowScoreWords.length > 0) {
+                    const suggestion = document.createElement('p');
+                    suggestion.innerHTML = `<i class="fa fa-arrow-right mr-1 text-primary"></i> 建议重点练习发音: ${lowScoreWords.map(word => `<span class="font-medium">${word.W}</span>`).join(', ')}`;
+                    suggestions.appendChild(suggestion);
+                }
+                
+                // 根据流利度给出建议
+                if (result.pron_fluency !== undefined && !isNaN(result.pron_fluency)) {
+                    const fluencySuggestion = document.createElement('p');
+                    
+                    if (result.pron_fluency < 60) {
+                        fluencySuggestion.innerHTML = `<i class="fa fa-arrow-right mr-1 text-primary"></i> 您的流利度有待提高，建议多进行朗读练习，注意语速和停顿。`;
+                    } else if (result.pron_fluency < 80) {
+                        fluencySuggestion.innerHTML = `<i class="fa fa-arrow-right mr-1 text-primary"></i> 您的流利度良好，但仍有提升空间，建议增加口语练习频率。`;
+                    } else {
+                        fluencySuggestion.innerHTML = `<i class="fa fa-arrow-right mr-1 text-primary"></i> 您的口语流利度非常出色，继续保持！`;
+                    }
+                    
+                    suggestions.appendChild(fluencySuggestion);
+                }
+                
+                // 根据准确度给出建议
+                if (result.pron_accuracy !== undefined && !isNaN(result.pron_accuracy)) {
+                    const accuracySuggestion = document.createElement('p');
+                    
+                    if (result.pron_accuracy < 60) {
+                        accuracySuggestion.innerHTML = `<i class="fa fa-arrow-right mr-1 text-primary"></i> 您的发音准确度需要提高，建议多听标准发音并模仿练习。`;
+                    } else if (result.pron_accuracy < 80) {
+                        accuracySuggestion.innerHTML = `<i class="fa fa-arrow-right mr-1 text-primary"></i> 您的发音准确度良好，但某些单词需要更准确的发音，建议对照音标练习。`;
+                    } else {
+                        accuracySuggestion.innerHTML = `<i class="fa fa-arrow-right mr-1 text-primary"></i> 您的发音准确度非常出色，继续保持！`;
+                    }
+                    
+                    suggestions.appendChild(accuracySuggestion);
+                }
+                
+                // 根据完整度给出建议
+                if (result.completeness !== undefined && !isNaN(result.completeness)) {
+                    const completenessSuggestion = document.createElement('p');
+                    
+                    if (result.completeness < 60) {
+                        completenessSuggestion.innerHTML = `<i class="fa fa-arrow-right mr-1 text-primary"></i> 您的发音完整度有待提高，建议注意单词的每个音节发音。`;
+                    } else if (result.completeness < 80) {
+                        completenessSuggestion.innerHTML = `<i class="fa fa-arrow-right mr-1 text-primary"></i> 您的发音完整度良好，继续保持。`;
+                    } else {
+                        completenessSuggestion.innerHTML = `<i class="fa fa-arrow-right mr-1 text-primary"></i> 您的发音完整度非常出色！`;
+                    }
+                    
+                    suggestions.appendChild(completenessSuggestion);
+                }
+            }
+            
+            // 根据分数获取颜色类
+            function getScoreColorClass(score) {
+                if (score >= 85) return 'bg-green-100 text-green-800';
+                if (score >= 60) return 'bg-yellow-100 text-yellow-800';
+                return 'bg-red-100 text-red-800';
+            }
+
+            // 按钮事件处理
+            recordButton.addEventListener('click', () => {
+                if (recordingManager.isRecording) {
+                    recordingManager.stop();
+                } else {
+                    if (!referenceText.value.trim()) {
+                        alert('请输入参考文本');
+                        return;
+                    }
+                    socketManager.connect();
+                    recordingManager.start();
+                }
+            });
+            
+            // 新增：播放按钮事件
+            playButton.addEventListener('click', togglePlay);
+            
+            // 新增：下载按钮事件
+            downloadButton.addEventListener('click', downloadAudio);
+            
+            // 新增：进度条点击事件
+            progressBarContainer.addEventListener('click', seekToPosition);
+
+            // 页面卸载时清理资源
+            window.addEventListener('beforeunload', () => {
+                recordingManager.cleanup();
+                socketManager.close();
+                
+                // 释放音频资源
+                if (audioElement) {
+                    audioElement.pause();
+                    audioElement = null;
+                }
+                
+                if (audioUrl) {
+                    URL.revokeObjectURL(audioUrl);
+                    audioUrl = null;
+                }
+            });
+            
+            // 窗口大小改变时重新绘制音频可视化
+            window.addEventListener('resize', () => {
+                if (recordingManager.isRecording && audioVisualizer) {
+                    const canvasCtx = audioVisualizer.getContext('2d');
+                    audioVisualizer.width = audioVisualizer.offsetWidth;
+                    audioVisualizer.height = audioVisualizer.offsetHeight;
+                    canvasCtx.fillStyle = 'rgb(230, 230, 230)';
+                    canvasCtx.fillRect(0, 0, audioVisualizer.width, audioVisualizer.height);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
+    

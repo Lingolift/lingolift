@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>语音评测系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+
+    <!-- <script src="https://cdn.jsdelivr.net/npm/recorder-js@1.0.7/index.min.js"></script> -->
+    
+    <!-- 修正Recorder.js加载方式 -->
+    <script>
+        // 创建script元素动态加载Recorder.js
+        function loadRecorderJS() {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/recorder-js@1.0.7/index.min.js';
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
+    </script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#10B981',
+                        accent: '#F59E0B',
+                        danger: '#EF4444',
+                    },
+                    fontFamily: {
+                        inter: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .pulse {
+                animation: pulse 2s infinite;
+            }
+            @keyframes pulse {
+                0% { opacity: 1; }
+                50% { opacity: 0.5; }
+                100% { opacity: 1; }
+            }
+            .scale-hover {
+                transition: transform 0.3s ease;
+            }
+            .scale-hover:hover {
+                transform: scale(1.05);
+            }
+        }
+    </style>
+</head>
+<body class="font-inter bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <header class="text-center mb-10">
+            <h1 class="text-[clamp(1.8rem,4vw,2.5rem)] font-bold text-primary mb-4">
+                语音评测系统
+            </h1>
+            <p class="text-gray-600 text-lg">
+                使用腾讯云智聆口语评测技术，实时分析您的发音准确性和流利度
+            </p>
+        </header>
+        
+        <main class="bg-white rounded-xl shadow-xl p-6 md:p-8 mb-8">
+            <div class="mb-8">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                    <i class="fa fa-cog text-primary mr-2"></i> 评测配置
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="referenceText" class="block text-sm font-medium text-gray-700 mb-1">
+                            参考文本
+                        </label>
+                        <textarea 
+                            id="referenceText" 
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all"
+                            placeholder="输入需要评测的文本..."
+                            required
+                        >beautiful</textarea>
+                    </div>
+                    <div>
+                        <label for="engineType" class="block text-sm font-medium text-gray-700 mb-1">
+                            引擎类型
+                        </label>
+                        <select 
+                            id="engineType" 
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all"
+                        >
+                            <option value="16k_en">16k英文</option>
+                            <option value="8k_en">8k英文</option>
+                            <option value="16k_cn">16k中文</option>
+                            <option value="8k_cn">8k中文</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex flex-col items-center justify-center mb-8">
+                <button 
+                    id="recordButton" 
+                    class="bg-gradient-to-r from-primary to-blue-700 text-white px-8 py-4 rounded-full shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1 focus:outline-none focus:ring-4 focus:ring-primary/30 flex items-center"
+                >
+                    <i class="fa fa-microphone mr-2 text-xl"></i>
+                    <span>开始录音</span>
+                </button>
+                
+                <div id="statusDisplay" class="mt-6 text-center hidden">
+                    <div id="statusText" class="text-gray-700 text-lg mb-2">准备就绪</div>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5 mb-4">
+                        <div id="progressBar" class="bg-primary h-2.5 rounded-full w-0 transition-all duration-300"></div>
+                    </div>
+                    
+                    <div id="scoreDisplay" class="mt-6 grid grid-cols-3 gap-4 w-full max-w-md">
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <div class="text-sm text-gray-500 mb-1">总体得分</div>
+                            <div id="overallScore" class="text-2xl font-bold text-primary">-</div>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <div class="text-sm text-gray-500 mb-1">发音准确度</div>
+                            <div id="accuracyScore" class="text-2xl font-bold text-secondary">-</div>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <div class="text-sm text-gray-500 mb-1">流利度</div>
+                            <div id="fluencyScore" class="text-2xl font-bold text-accent">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="resultContainer" class="mb-8 opacity-0 transition-opacity duration-500">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                    <i class="fa fa-list-alt text-primary mr-2"></i> 详细结果
+                </h2>
+                
+                <div class="bg-gray-50 p-4 rounded-lg">
+                    <div class="text-sm text-gray-500 mb-2">单词分析</div>
+                    <div id="wordsAnalysis" class="space-y-2">
+                        <!-- 结果将在这里动态生成 -->
+                    </div>
+                </div>
+                
+                <div class="mt-4 bg-gray-50 p-4 rounded-lg">
+                    <div class="text-sm text-gray-500 mb-2">改进建议</div>
+                    <div id="suggestions" class="text-gray-700">
+                        <!-- 建议将在这里动态生成 -->
+                    </div>
+                </div>
+            </div>
+        </main>
+        
+        <footer class="text-center text-gray-500 text-sm">
+            <p>© 2025 语音评测系统 | 使用腾讯云智聆口语评测技术</p>
+        </footer>
+    </div>
+    
+    <script>
+        // 等待DOM加载完成后执行
+        document.addEventListener('DOMContentLoaded', function() {
+            // 加载Recorder.js库
+            loadRecorderJS()
+                .then(() => {
+                    console.log('Recorder.js加载成功');
+                    // 初始化语音评测系统
+                    initVoiceAssessmentSystem();
+                })
+                .catch(error => {
+                    console.error('Recorder.js加载失败:', error);
+                    alert('语音录制功能依赖的库加载失败，请刷新页面重试');
+                    
+                    // 禁用录音按钮
+                    const recordButton = document.getElementById('recordButton');
+                    if (recordButton) {
+                        recordButton.disabled = true;
+                        recordButton.innerHTML = '<i class="fa fa-microphone-slash mr-2 text-xl"></i><span>录音功能不可用</span>';
+                        recordButton.classList.remove('from-primary', 'to-blue-700');
+                        recordButton.classList.add('from-gray-400', 'to-gray-600');
+                    }
+                });
+            
+            // 语音评测系统初始化函数
+            function initVoiceAssessmentSystem() {
+                // 增加Recorder.js存在性检查
+                if (typeof Recorder === 'undefined') {
+                    console.error('Recorder对象未定义');
+                    alert('语音录制功能初始化失败，请刷新页面重试');
+                    return;
+                }
+                
+                // 获取DOM元素并添加非空校验
+                const recordButton = document.getElementById('recordButton');
+                const statusDisplay = document.getElementById('statusDisplay');
+                const statusText = document.getElementById('statusText');
+                const progressBar = document.getElementById('progressBar');
+                const resultContainer = document.getElementById('resultContainer');
+                const referenceText = document.getElementById('referenceText');
+                const engineType = document.getElementById('engineType');
+                const overallScore = document.getElementById('overallScore');
+                const accuracyScore = document.getElementById('accuracyScore');
+                const fluencyScore = document.getElementById('fluencyScore');
+                const wordsAnalysis = document.getElementById('wordsAnalysis');
+                const suggestions = document.getElementById('suggestions');
+
+                // 校验元素是否存在
+                if (!recordButton || !referenceText || !engineType) {
+                    console.error('关键DOM元素未找到');
+                    return;
+                }
+
+                let isRecording = false;
+                let mediaRecorder = null;
+                let socket = null;
+
+                recordButton.addEventListener('click', toggleRecording);
+
+                function toggleRecording() {
+                    if (isRecording) {
+                        stopRecording();
+                    } else {
+                        startRecording();
+                    }
+                }
+
+                function startRecording() {
+                    const refText = referenceText.value.trim();
+                    if (!refText) {
+                        alert('请输入参考文本');
+                        return;
+                    }
+
+                    resetResultDisplay();
+                    updateUI('recording');
+                    connectWebSocket();
+
+                    navigator.mediaDevices.getUserMedia({ audio: true })
+                        .then(stream => {
+                            // 使用recorder.js录制PCM格式（16kHz）
+                            mediaRecorder = new MediaRecorder(stream);
+
+                            mediaRecorder.ondataavailable = (event) => {
+                                const pcmData = event.data;
+                                // 处理奇数长度（补零）
+                                if (pcmData.byteLength % 2 !== 0) {
+                                    const uint8Data = new Uint8Array(pcmData);
+                                    const paddedData = new Uint8Array([...uint8Data, 0]);
+                                    if (socket && socket.readyState === WebSocket.OPEN) {
+                                        socket.send(paddedData.buffer);
+                                    }
+                                } else {
+                                    if (socket && socket.readyState === WebSocket.OPEN) {
+                                        socket.send(pcmData);
+                                    }
+                                }
+                            };
+
+                            mediaRecorder.onstop = () => {
+                                if (socket && socket.readyState === WebSocket.OPEN) {
+                                    socket.send('stop'); // 发送停止信号
+                                    socket.close();
+                                }
+                                stream.getTracks().forEach(track => track.stop());
+                                updateUI('processing');
+                            };
+
+                            mediaRecorder.start();
+                        })
+                        .catch(error => {
+                            console.error('获取麦克风权限失败:', error);
+                            statusText.textContent = '获取麦克风权限失败';
+                            statusText.classList.add('text-danger');
+                            progressBar.style.width = '0%';
+                            resetRecordingUI();
+                        });
+                }
+
+                function stopRecording() {
+                    isRecording = false;
+                    updateUI('stopped');
+                    if (mediaRecorder) {
+                        mediaRecorder.stop();
+                    }
+                }
+
+                function updateUI(state) {
+                    switch (state) {
+                        case 'recording':
+                            recordButton.innerHTML = '<i class="fa fa-stop mr-2 text-xl"></i><span>停止录音</span>';
+                            recordButton.classList.remove('from-primary', 'to-blue-700');
+                            recordButton.classList.add('from-danger', 'to-red-700');
+                            statusDisplay.classList.remove('hidden');
+                            statusText.textContent = '正在录音...';
+                            progressBar.style.width = '50%';
+                            progressBar.classList.add('pulse');
+                            break;
+                        case 'processing':
+                            statusText.textContent = '正在处理评测结果...';
+                            progressBar.style.width = '75%';
+                            progressBar.classList.remove('pulse');
+                            break;
+                        case 'stopped':
+                            recordButton.innerHTML = '<i class="fa fa-microphone mr-2 text-xl"></i><span>开始录音</span>';
+                            recordButton.classList.remove('from-danger', 'to-red-700');
+                            recordButton.classList.add('from-primary', 'to-blue-700');
+                            statusText.textContent = '录音已停止';
+                            progressBar.style.width = '0%';
+                            break;
+                    }
+                }
+
+                function resetRecordingUI() {
+                    isRecording = false;
+                    recordButton.innerHTML = '<i class="fa fa-microphone mr-2 text-xl"></i><span>开始录音</span>';
+                    recordButton.classList.remove('from-danger', 'to-red-700');
+                    recordButton.classList.add('from-primary', 'to-blue-700');
+                    statusText.textContent = '准备就绪';
+                    statusText.classList.remove('text-danger');
+                    progressBar.style.width = '0%';
+                    progressBar.classList.remove('pulse');
+                    statusDisplay.classList.add('hidden');
+                }
+
+                function resetResultDisplay() {
+                    resultContainer.style.opacity = '0';
+                    overallScore.textContent = '-';
+                    accuracyScore.textContent = '-';
+                    fluencyScore.textContent = '-';
+                    wordsAnalysis.innerHTML = '';
+                    suggestions.innerHTML = '';
+                }
+
+                function connectWebSocket() {
+                    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                    socket = new WebSocket(`${protocol}//${window.location.host}/ws/assessment`);
+
+                    socket.onopen = () => {
+                        const config = {
+                            ref_text: referenceText.value,
+                            server_engine_type: engineType.value
+                        };
+                        socket.send(JSON.stringify(config));
+                    };
+
+                    socket.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            processServerMessage(data);
+                        } catch (error) {
+                            console.error('解析服务器消息失败:', error);
+                        }
+                    };
+
+                    socket.onclose = (event) => {
+                        console.log('WebSocket连接已关闭:', event);
+                        if (isRecording) {
+                            resetRecordingUI();
+                        }
+                    };
+
+                    socket.onerror = (error) => {
+                        console.error('WebSocket错误:', error);
+                        statusText.textContent = '连接错误';
+                        statusText.classList.add('text-danger');
+                        resetRecordingUI();
+                    };
+                }
+
+                function processServerMessage(data) {
+                    console.log('收到服务器消息:', data);
+                    switch (data.status) {
+                        case 'start':
+                            statusText.textContent = '评测开始...';
+                            break;
+                        case 'intermediate':
+                            updateResults(data.result);
+                            break;
+                        case 'complete':
+                            updateResults(data.result);
+                            statusText.textContent = '评测完成';
+                            progressBar.style.width = '100%';
+                            progressBar.classList.remove('pulse');
+                            progressBar.classList.add('bg-secondary');
+                            setTimeout(() => {
+                                resultContainer.style.opacity = '1';
+                            }, 500);
+                            break;
+                        case 'error':
+                            console.error('评测错误:', data.error);
+                            statusText.textContent = `错误: ${data.error}`;
+                            statusText.classList.add('text-danger');
+                            resetRecordingUI();
+                            break;
+                    }
+                }
+
+                function updateResults(result) {
+                    if (!result) return;
+                    overallScore.textContent = result.overall_score ? result.overall_score.toFixed(1) : '-';
+                    accuracyScore.textContent = result.pron_accuracy ? result.pron_accuracy.toFixed(1) : '-';
+                    fluencyScore.textContent = result.pron_fluency ? result.pron_fluency.toFixed(1) : '-';
+                    if (result.words && result.words.length > 0) updateWordAnalysis(result.words);
+                    generateSuggestions(result);
+                }
+
+                function updateWordAnalysis(words) {
+                    wordsAnalysis.innerHTML = '';
+                    words.forEach((word) => {
+                        const div = document.createElement('div');
+                        div.className = 'flex items-center p-2 rounded-lg hover:bg-gray-100 transition-colors';
+                        div.innerHTML = `
+                            <span class="font-medium mr-3 text-gray-800">${word.W}</span>
+                            <span class="text-sm text-gray-500 mr-3">${word.P}</span>
+                            <span class="px-2 py-1 rounded-full text-xs font-semibold ${getScoreColorClass(parseFloat(word.S))}">
+                                ${parseFloat(word.S).toFixed(1)}
+                            </span>
+                        `;
+                        wordsAnalysis.appendChild(div);
+                    });
+                }
+
+                function generateSuggestions(result) {
+                    suggestions.innerHTML = '';
+                    if (!result.words || result.words.length === 0) return;
+                    
+                    const lowScoreWords = result.words.filter(word => parseFloat(word.S) < 70);
+                    if (lowScoreWords.length > 0) {
+                        const suggestion = document.createElement('p');
+                        suggestion.textContent = `建议重点练习发音: ${lowScoreWords.map(word => word.W).join(', ')}`;
+                        suggestions.appendChild(suggestion);
+                    }
+                    
+                    // 准确度建议
+                    if (result.pron_accuracy !== undefined) {
+                        const accuracy = result.pron_accuracy;
+                        suggestions.innerHTML += `<p>准确度${accuracy < 60 ? '较低' : accuracy < 80 ? '中等' : '优秀'}，${accuracy < 60 ? '建议对照音标逐词练习' : accuracy < 80 ? '建议重点练习发音细节，提高发音的清晰度' : '发音非常标准，请继续保持！'}.</p>`;
+                    }
+                    
+                    // 流利度建议
+                    if (result.pron_fluency !== undefined) {
+                        const fluency = result.pron_fluency;
+                        suggestions.innerHTML += `<p>流利度${fluency < 60 ? '较差' : fluency < 80 ? '良好' : '优秀'}，${fluency < 60 ? '建议多进行朗读练习，注意语速和停顿' : fluency < 80 ? '建议增加口语练习频率，提高语速稳定性' : '口语流利度出色，请继续保持！'}.</p>`;
+                    }
+                    
+                    // 发音建议
+                    if (result.pron_intonation !== undefined) {
+                        const intonation = result.pron_intonation;
+                        suggestions.innerHTML += `<p>语调${intonation < 60 ? '需要改进' : intonation < 80 ? '有一定基础' : '非常自然'}，${intonation < 60 ? '建议多听原声材料，模仿语调变化' : intonation < 80 ? '可以尝试更多语调变化，增强表达的感染力' : '语调运用自如，表达富有感染力！'}.</p>`;
+                    }
+                    
+                    // 综合建议
+                    const overallScore = result.overall_score || 0;
+                    if (overallScore < 60) {
+                        suggestions.innerHTML += `<p class="mt-2 text-danger font-medium">总体评分较低，建议从基础发音开始系统学习，多进行针对性练习。</p>`;
+                    } else if (overallScore < 80) {
+                        suggestions.innerHTML += `<p class="mt-2 text-accent font-medium">已有一定基础，但仍有提升空间，建议增加口语练习频率，注重细节。</p>`;
+                    } else {
+                        suggestions.innerHTML += `<p class="mt-2 text-secondary font-medium">口语水平优秀，建议通过与外教交流或参与演讲等活动进一步提升！</p>`;
+                    }
+                }
+                
+                function getScoreColorClass(score) {
+                    if (isNaN(score)) return 'bg-gray-100 text-gray-800';
+                    if (score >= 85) return 'bg-green-100 text-green-800';
+                    if (score >= 60) return 'bg-yellow-100 text-yellow-800';
+                    return 'bg-red-100 text-red-800';
+                }
+            }
+        });
+    </script>
+</body>
+</html>
