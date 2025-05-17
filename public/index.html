@@ -158,9 +158,7 @@
         }
 
         .config-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 1.5rem;
+            display: flex;
         }
 
         @media (min-width: 768px) {
@@ -171,6 +169,7 @@
 
         .form-group {
             margin-bottom: 1rem;
+            width: 100%;
         }
 
         .form-label {
@@ -241,13 +240,15 @@
             max-width: 28rem;
             margin-left: auto;
             margin-right: auto;
-            opacity: 0;
+            /* opacity: 0; */
+            display: none;
             transform: translateY(10px);
             transition: all 0.3s ease;
         }
 
         .play-controls.visible {
-            opacity: 1;
+            /* opacity: 1; */
+            display: block;
             transform: translateY(0);
         }
 
@@ -425,7 +426,8 @@
         /* 结果容器 */
         .result-container {
             margin-bottom: 2rem;
-            opacity: 0;
+            /* opacity: 0; */
+            display: none;
             transition: opacity 0.5s ease;
         }
 
@@ -607,7 +609,7 @@
 <body class="font-inter bg-gray-50 min-h-screen">
     <div class="container mx-auto px-4 py-8 max-w-4xl">
         <!-- 状态指示栏 -->
-        <div class="status-bar">
+        <!-- <div class="status-bar">
             <div class="socket-status">
                 <div id="socketStatus" class="socket-indicator"></div>
                 <span id="socketStatusText" class="socket-text">WebSocket 未连接</span>
@@ -615,7 +617,7 @@
             <div class="audio-meter" id="audioMeter">
                 <div class="audio-level" id="audioLevel"></div>
             </div>
-        </div>
+        </div> -->
 
         <header class="header">
             <div class="title">
@@ -623,9 +625,9 @@
                 <span class="title-dot"></span>
                 <div class="title-underline"></div>
             </div>
-            <p class="subtitle">
+            <!-- <p class="subtitle">
                 使用腾讯云智聆口语评测技术，实时分析您的发音准确性和流利度
-            </p>
+            </p> -->
         </header>
         
         <main class="main-content">
@@ -647,7 +649,7 @@
                         >beautiful</textarea>
                         <div class="form-help">请输入要评测的单词或句子</div>
                     </div>
-                    <div class="form-group">
+                    <!-- <div class="form-group">
                         <label for="engineType" class="form-label">
                             引擎类型
                         </label>
@@ -660,7 +662,7 @@
                             <option value="16k_cn">16k中文</option>
                             <option value="8k_cn">8k中文</option>
                         </select>
-                    </div>
+                    </div> -->
                 </div>
             </div>
             
@@ -784,15 +786,15 @@
         document.addEventListener('DOMContentLoaded', async () => {
             // 获取DOM元素引用
             const recordButton = document.getElementById('recordButton');
-            const socketStatus = document.getElementById('socketStatus');
-            const socketStatusText = document.getElementById('socketStatusText');
+            // const socketStatus = document.getElementById('socketStatus');
+            // const socketStatusText = document.getElementById('socketStatusText');
             const audioVisualizer = document.getElementById('audioVisualizer');
             const audioLevel = document.getElementById('audioLevel');
             const statusText = document.getElementById('statusText');
             const progressBar = document.getElementById('progressBar');
             const resultContainer = document.getElementById('resultContainer');
             const referenceText = document.getElementById('referenceText');
-            const engineType = document.getElementById('engineType');
+            // const engineType = document.getElementById('engineType');
             const overallScore = document.getElementById('overallScore');
             const accuracyScore = document.getElementById('accuracyScore');
             const fluencyScore = document.getElementById('fluencyScore');
@@ -820,8 +822,8 @@
                     const self = this; // 保存对this的引用
 
                     this.socket.onopen = () => {
-                        socketStatus.style.backgroundColor = 'var(--socket-connected)';
-                        socketStatusText.textContent = 'WebSocket 已连接';
+                        // socketStatus.style.backgroundColor = 'var(--socket-connected)';
+                        // socketStatusText.textContent = 'WebSocket 已连接';
                         self.sendConfig();
                         self.autoReconnectClear();
                     };
@@ -836,8 +838,8 @@
                     };
 
                     this.socket.onclose = (event) => {
-                        socketStatus.style.backgroundColor = 'var(--socket-disconnected)';
-                        socketStatusText.textContent = `WebSocket 断开 (${event.code})`;
+                        // socketStatus.style.backgroundColor = 'var(--socket-disconnected)';
+                        // socketStatusText.textContent = `WebSocket 断开 (${event.code})`;
                     };
 
                     this.socket.onerror = (error) => {
@@ -851,7 +853,7 @@
                 sendConfig() {
                     const config = {
                         ref_text: referenceText.value.trim(),
-                        server_engine_type: engineType.value
+                        server_engine_type: '16k_en' // 默认16k英文
                     };
                     if (config.ref_text && this.socket) {
                         this.socket.send(JSON.stringify(config));
@@ -896,22 +898,39 @@
                 audioChunks: [],
                 
                 async start() {
-                    if (!await this.checkPermissions()) return;
-                    if (!this.initAudioContext()) return;
-                    if (!await this.requestMicrophonePermission()) return;
+                    // 重置结果区域
+                    this.resetResultDisplay();
                     
+                    // 显示loading状态
+                    recordButton.disabled = true;
+                    recordButton.innerHTML = '<i class="fa fa-spinner fa-spin"></i><span>准备中...</span>';
+                    statusText.innerHTML = '<i class="fa fa-spinner fa-spin"></i><span>初始化录音...</span>';
+                    statusDisplay.classList.remove('hidden');
+                    statusDisplay.classList.add('visible');
+                    progressBar.style.width = '25%';
+                    progressBar.classList.add('pulse');
+                    
+                    if (!await this.checkPermissions()) {
+                        this.resetLoadingState();
+                        return;
+                    }
+                    if (!this.initAudioContext()) {
+                        this.resetLoadingState();
+                        return;
+                    }
+                    if (!await this.requestMicrophonePermission()) {
+                        this.resetLoadingState();
+                        return;
+                    }
+                    
+                    // 录音开始，结束loading状态
                     this.isRecording = true;
+                    recordButton.disabled = false;
                     recordButton.classList.remove('record-button');
                     recordButton.classList.add('record-button', 'recording');
                     recordButton.innerHTML = '<i class="fa fa-stop"></i><span>停止录音</span>';
                     statusText.innerHTML = '<i class="fa fa-microphone"></i><span>正在录音...</span>';
                     progressBar.style.width = '50%';
-                    progressBar.classList.add('pulse');
-                    statusDisplay.classList.remove('hidden');
-                    statusDisplay.classList.add('visible');
-                    
-                    // 重置结果区域
-                    this.resetResultDisplay();
                     
                     // 重置录音数据
                     this.audioChunks = [];
@@ -922,102 +941,123 @@
                     // 启动音频可视化
                     this.startVisualization();
                 },
-
+                
+                // 重置loading状态
+                resetLoadingState() {
+                    recordButton.disabled = false;
+                    recordButton.innerHTML = '<i class="fa fa-microphone"></i><span>开始录音</span>';
+                    statusText.innerHTML = '<i class="fa fa-info-circle"></i><span>录音已取消</span>';
+                    progressBar.style.width = '0%';
+                    progressBar.classList.remove('pulse');
+                },
+                
                 async checkPermissions() {
-                        try {
-                            // 检测是否为iPhone设备
-                            const isIPhone = /iPhone/.test(navigator.platform) || 
-                                            (navigator.userAgent.includes('Mac') && 'ontouchend' in document);
-                            
-                            // 检测是否为Safari浏览器
-                            const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-                            
-                            // iPhone上的Safari特殊处理
-                            if (isIPhone && isSafari) {
+                    try {
+                        // 检测是否为iPhone设备
+                        const isIPhone = /iPhone/.test(navigator.platform) || 
+                                        (navigator.userAgent.includes('Mac') && 'ontouchend' in document);
+                        
+                        // 检测是否为Safari浏览器
+                        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+                        
+                        // iPhone上的Safari特殊处理
+                        if (isIPhone && isSafari) {
+                            try {
+                                // iPhone上必须在用户交互（如点击）后调用
+                                // 这里假设已经在点击事件处理函数中
+                                
+                                // 尝试访问媒体设备
+                                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                                
+                                // 成功获取流后释放
+                                stream.getTracks().forEach(track => track.stop());
+                                
+                                // 保存权限状态（可选）
+                                localStorage.setItem('microphonePermission', 'granted');
+                                
+                                return true;
+                            } catch (err) {
+
+                                alert(err);
+                                console.error('iPhone麦克风权限被拒绝:', err);
+                                
+                                // 显示自定义提示，引导用户到设置页面
+                                const isPermissionDenied = err.name === 'NotAllowedError';
+                                if (isPermissionDenied) {
+                                    alert('请在设置 > Safari > 网站设置 > 麦克风 中允许本网站访问麦克风');
+                                } else {
+                                    alert('无法访问麦克风，请确保您的设备有麦克风并且未被禁用');
+                                }
+                                
+                                // 保存权限状态（可选）
+                                localStorage.setItem('microphonePermission', 'denied');
+                                return false;
+                            }
+                        }
+                        
+                        // 苹果电脑(Mac)上的Safari处理
+                        const isMacSafari = /Mac/.test(navigator.platform) && isSafari;
+                        if (isMacSafari) {
+                            try {
+                                // 尝试使用标准权限API
+                                const permission = await navigator.permissions.query({ name: 'microphone' });
+                                
+                                // 如果权限已授予或提示
+                                if (permission.state === 'granted' || permission.state === 'prompt') {
+                                    return true;
+                                }
+                                
+                                // 如果权限被拒绝
+                                if (permission.state === 'denied') {
+                                    alert('请在Safari设置中允许麦克风访问权限');
+                                    return false;
+                                }
+                            } catch (error) {
+                                // 标准API失败时，回退到getUserMedia
+                                console.log('标准权限API失败，回退到getUserMedia方法');
                                 try {
-                                    // iPhone上必须在用户交互（如点击）后调用
-                                    // 这里假设已经在点击事件处理函数中
-                                    
-                                    // 尝试访问媒体设备
                                     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                                    
-                                    // 成功获取流后释放
                                     stream.getTracks().forEach(track => track.stop());
-                                    
-                                    // 保存权限状态（可选）
-                                    localStorage.setItem('microphonePermission', 'granted');
-                                    
                                     return true;
                                 } catch (err) {
-
-                                    alert(err);
-                                    console.error('iPhone麦克风权限被拒绝:', err);
-                                    
-                                    // 显示自定义提示，引导用户到设置页面
-                                    const isPermissionDenied = err.name === 'NotAllowedError';
-                                    if (isPermissionDenied) {
-                                        alert('请在设置 > Safari > 网站设置 > 麦克风 中允许本网站访问麦克风');
-                                    } else {
-                                        alert('无法访问麦克风，请确保您的设备有麦克风并且未被禁用');
-                                    }
-                                    
-                                    // 保存权限状态（可选）
-                                    localStorage.setItem('microphonePermission', 'denied');
+                                    console.error('Mac上的Safari麦克风权限被拒绝:', err);
+                                    alert('请在Safari设置中允许麦克风访问权限');
                                     return false;
                                 }
                             }
-                            
-                            // 苹果电脑(Mac)上的Safari处理
-                            const isMacSafari = /Mac/.test(navigator.platform) && isSafari;
-                            if (isMacSafari) {
-                                try {
-                                    // 尝试使用标准权限API
-                                    const permission = await navigator.permissions.query({ name: 'microphone' });
-                                    
-                                    // 如果权限已授予或提示
-                                    if (permission.state === 'granted' || permission.state === 'prompt') {
-                                        return true;
-                                    }
-                                    
-                                    // 如果权限被拒绝
-                                    if (permission.state === 'denied') {
-                                        alert('请在Safari设置中允许麦克风访问权限');
-                                        return false;
-                                    }
-                                } catch (error) {
-                                    // 标准API失败时，回退到getUserMedia
-                                    console.log('标准权限API失败，回退到getUserMedia方法');
-                                    try {
-                                        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                                        stream.getTracks().forEach(track => track.stop());
-                                        return true;
-                                    } catch (err) {
-                                        console.error('Mac上的Safari麦克风权限被拒绝:', err);
-                                        alert('请在Safari设置中允许麦克风访问权限');
-                                        return false;
-                                    }
-                                }
-                            }
-                            
-                            // 非苹果设备使用标准权限API
-                            const permission = await navigator.permissions.query({ name: 'microphone' });
-                            if (permission.state === 'denied') {
-                                alert('请在浏览器设置中允许麦克风访问权限');
-                                return false;
-                            }
-                            return true;
-                        } catch (error) {
-                            console.error('检查麦克风权限失败:', error);
-                            // 无法检查权限，继续尝试
-                            return true;
                         }
-                    },
+                        
+                        // 非苹果设备使用标准权限API
+                        const permission = await navigator.permissions.query({ name: 'microphone' });
+                        if (permission.state === 'denied') {
+                            alert('请在浏览器设置中允许麦克风访问权限');
+                            return false;
+                        }
+                        return true;
+                    } catch (error) {
+                        console.error('检查麦克风权限失败:', error);
+                        // 无法检查权限，继续尝试
+                        return true;
+                    }
+                },
+
+                resetRecordingState() {
+                    recordButton.disabled = false;
+                    recordButton.innerHTML = '<i class="fa fa-microphone"></i><span>开始录音</span>';
+                    statusText.innerHTML = '<i class="fa fa-info-circle"></i><span>录音已取消</span>';
+                    progressBar.style.width = '0%';
+                    progressBar.classList.remove('pulse');
+                    resultContainer.style.display = 'none';
+                },
 
                 stop() {
+                    // 确保按钮不可点击，避免重复点击
+                    recordButton.disabled = true;
+                    
                     this.isRecording = false;
                     recordButton.classList.remove('record-button', 'recording');
                     recordButton.classList.add('record-button');
-                    recordButton.innerHTML = '<i class="fa fa-microphone"></i><span>开始录音</span>';
+                    recordButton.innerHTML = '<i class="fa fa-spinner fa-spin"></i><span>处理中...</span>';
                     statusText.innerHTML = '<i class="fa fa-cog fa-spin"></i><span>录音已停止，正在处理...</span>';
                     progressBar.style.width = '75%';
                     progressBar.classList.remove('pulse');
@@ -1027,14 +1067,37 @@
                     
                     // 结束录音并发送终止信号
                     if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
-                        // 先发送结束标志
-                        socketManager.sendAudioData(JSON.stringify({type: "end"}));
-                        
-                        // 然后停止录音
-                        this.mediaRecorder.stop();
+                        try {
+                            // 先发送结束标志
+                            socketManager.sendAudioData(JSON.stringify({type: "end"}));
+                            
+                            // 然后停止录音
+                            this.mediaRecorder.stop();
+                            
+                            // 录音处理完成后恢复按钮状态
+                            setTimeout(() => {
+                                recordButton.disabled = false;
+                                recordButton.innerHTML = '<i class="fa fa-microphone"></i><span>开始录音</span>';
+                                
+                                // 如果8秒后还没有收到处理完成的消息，恢复到初始状态
+                                setTimeout(() => {
+                                    if (statusText.textContent.includes('录音已停止，正在处理')) {
+                                        statusText.innerHTML = '<i class="fa fa-info-circle"></i><span>处理超时，但录音可能已完成</span>';
+                                        progressBar.style.width = '0%';
+                                        // 不隐藏结果区域，因为可能已经有结果
+                                    }
+                                }, 8000);
+                            }, 1000);
+                        } catch (error) {
+                            console.error('停止录音失败:', error);
+                            this.resetRecordingState();
+                        }
+                    } else {
+                        // 如果没有录音进行，直接恢复按钮状态
+                        this.resetRecordingState();
                     }
                 },
-
+                
                 initAudioContext() {
                     try {
                         audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -1055,6 +1118,7 @@
                     if (!this.mimeType) {
                         statusText.innerHTML = '<i class="fa fa-exclamation-triangle"></i><span>浏览器不支持任何可用的音频格式</span>';
                         statusText.classList.add('error');
+                        this.resetLoadingState();
                         return false;
                     }
                     
@@ -1074,6 +1138,7 @@
                                 console.error('创建 MediaRecorder 失败:', error);
                                 statusText.innerHTML = '<i class="fa fa-exclamation-triangle"></i><span>无法初始化录音功能</span>';
                                 statusText.classList.add('error');
+                                this.resetLoadingState();
                                 this.cleanup();
                                 return false;
                             }
@@ -1098,9 +1163,21 @@
                             
                             this.mediaRecorder.onstop = () => {
                                 console.log('MediaRecorder 已停止');
+                                console.log('录音块数量:', this.audioChunks.length);
                                 
-                                // 处理录音完成
-                                this.processRecording();
+                                // 检查是否有录音数据
+                                if (this.audioChunks.length === 0) {
+                                    console.warn('没有录音数据');
+                                    statusText.innerHTML = '<i class="fa fa-info-circle"></i><span>没有检测到录音数据，请重试</span>';
+                                    progressBar.style.width = '0%';
+                                    progressBar.classList.remove('pulse');
+                                    recordButton.disabled = false;
+                                    recordButton.innerHTML = '<i class="fa fa-microphone"></i><span>开始录音</span>';
+                                    resultContainer.style.display = 'none';
+                                } else {
+                                    // 处理录音完成，即使时间很短也处理
+                                    this.processRecording();
+                                }
                                 
                                 if (stream) {
                                     stream.getTracks().forEach(track => track.stop());
@@ -1112,6 +1189,7 @@
                                 console.error('MediaRecorder 错误:', error);
                                 statusText.innerHTML = `<i class="fa fa-exclamation-triangle"></i><span>录音错误: ${error.message}</span>`;
                                 statusText.classList.add('error');
+                                this.resetRecordingState();
                                 this.cleanup();
                             };
                             
@@ -1122,6 +1200,7 @@
                             console.error('麦克风权限获取失败:', error);
                             statusText.innerHTML = '<i class="fa fa-exclamation-triangle"></i><span>请允许访问麦克风</span>';
                             statusText.classList.add('error');
+                            this.resetLoadingState();
                             this.cleanup();
                             return false;
                         });
@@ -1238,7 +1317,7 @@
                 },
 
                 resetResultDisplay() {
-                    resultContainer.style.opacity = '0';
+                    resultContainer.style.display = 'none';
                     overallScore.textContent = '-';
                     accuracyScore.textContent = '-';
                     fluencyScore.textContent = '-';
@@ -1272,8 +1351,11 @@
                         return;
                     }
                     
+                    console.log('处理录音数据，块数量:', this.audioChunks.length);
+                    
                     // 创建音频Blob
                     audioBlob = new Blob(this.audioChunks, { type: this.mimeType });
+                    console.log('录音数据大小:', audioBlob.size, 'bytes');
                     
                     // 创建音频URL
                     audioUrl = URL.createObjectURL(audioBlob);
@@ -1283,6 +1365,19 @@
                     
                     // 显示播放控件
                     this.showPlayControls();
+                    
+                    // 确保结果区域最终会显示（即使结果尚未返回或仅包含短音频）
+                    if (audioBlob.size > 0) {
+                        console.log('有效的录音数据，可以进行评测');
+                        // 如果5秒后仍无评测结果，显示结果区域
+                        setTimeout(() => {
+                            if (resultContainer.style.display === 'none') {
+                                console.log('评测未返回结果，但显示结果区域');
+                                statusText.innerHTML = '<i class="fa fa-check"></i><span>录音已完成</span>';
+                                resultContainer.style.display = 'block';
+                            }
+                        }, 5000);
+                    }
                 },
                 
                 initAudioElement() {
@@ -1449,9 +1544,13 @@
                         progressBar.classList.remove('pulse');
                         progressBar.classList.add('bg-secondary');
                         
+                        // 确保按钮可用状态
+                        recordButton.disabled = false;
+                        recordButton.innerHTML = '<i class="fa fa-microphone"></i><span>开始录音</span>';
+                        
                         // 显示结果区域
                         setTimeout(() => {
-                            resultContainer.style.opacity = '1';
+                            resultContainer.style.display = 'block';
                         }, 500);
                         break;
                         
@@ -1460,6 +1559,13 @@
                         statusText.innerHTML = `<i class="fa fa-exclamation-triangle"></i><span>错误: ${data.error}</span>`;
                         statusText.classList.add('error');
                         progressBar.style.width = '0%';
+                        progressBar.classList.remove('pulse');
+                        resultContainer.style.display = 'none';
+                        
+                        // 确保按钮可用状态
+                        recordButton.disabled = false;
+                        recordButton.innerHTML = '<i class="fa fa-microphone"></i><span>开始录音</span>';
+                        
                         recordingManager.cleanup();
                         break;
                 }
