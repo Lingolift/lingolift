@@ -4,95 +4,602 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>语音评测系统</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '#3B82F6',
-                        secondary: '#10B981',
-                        accent: '#F59E0B',
-                        danger: '#EF4444',
-                        "socket-connected": "#059669",
-                        "socket-disconnected": "#dc2626"
-                    },
-                    fontFamily: {
-                        inter: ['Inter', 'sans-serif'],
-                    },
-                }
+    <style>
+        :root {
+            --primary-color: #3B82F6;
+            --secondary-color: #10B981;
+            --accent-color: #F59E0B;
+            --danger-color: #EF4444;
+            --socket-connected: #059669;
+            --socket-disconnected: #dc2626;
+            --text-primary: #1F2937;
+            --text-secondary: #4B5563;
+            --bg-primary: #F9FAFB;
+            --bg-secondary: #F3F4F6;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-primary);
+            min-height: 100vh;
+            color: var(--text-primary);
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 896px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+        }
+
+        /* 状态指示栏 */
+        .status-bar {
+            background-color: white;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            padding: 0.75rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .socket-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .socket-indicator {
+            width: 1.5rem;
+            height: 1.5rem;
+            border-radius: 50%;
+            background-color: var(--socket-disconnected);
+        }
+
+        .socket-text {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        /* 音频电平表 */
+        .audio-meter {
+            height: 10px;
+            background-color: #e5e7eb;
+            border-radius: 5px;
+            width: 200px;
+        }
+
+        .audio-level {
+            height: 100%;
+            background-color: var(--primary-color);
+            transition: width 0.1s ease;
+            width: 0;
+        }
+
+        /* 标题区域 */
+        .header {
+            text-align: center;
+            margin-bottom: 2.5rem;
+        }
+
+        .title {
+            font-size: clamp(1.8rem, 4vw, 2.5rem);
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+            position: relative;
+            display: inline-block;
+        }
+
+        .title-dot {
+            display: inline-block;
+            width: 0.5rem;
+            height: 0.5rem;
+            background-color: var(--primary-color);
+            border-radius: 50%;
+            margin-left: 0.25rem;
+            animation: floating 3s ease-in-out infinite;
+        }
+
+        .title-underline {
+            position: absolute;
+            bottom: -0.25rem;
+            left: 0;
+            width: 100%;
+            height: 0.25rem;
+            background-color: rgba(59, 130, 246, 0.3);
+            border-radius: 9999px;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 1.125rem;
+        }
+
+        /* 主内容区域 */
+        .main-content {
+            background-color: white;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            transition: all 0.3s ease;
+        }
+
+        .main-content:hover {
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 评测配置区域 */
+        .config-section {
+            margin-bottom: 2rem;
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+        }
+
+        .section-title i {
+            color: var(--primary-color);
+            margin-right: 0.5rem;
+        }
+
+        .config-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1.5rem;
+        }
+
+        @media (min-width: 768px) {
+            .config-grid {
+                grid-template-columns: 1fr 1fr;
             }
         }
-    </script>
-    
-    <style type="text/tailwindcss">
-        @layer utilities {
-            .audio-meter {
-                height: 10px;
-                background-color: #e5e7eb;
-                border-radius: 5px;
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 0.25rem;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 0.5rem 1rem;
+            border: 1px solid #D1D5DB;
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            transition: all 0.2s ease;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .form-textarea {
+            resize: none;
+            min-height: 100px;
+        }
+
+        .form-help {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+
+        /* 录音按钮 */
+        .record-button {
+            background: linear-gradient(to right, var(--primary-color), #1D4ED8);
+            color: white;
+            padding: 1rem 2rem;
+            border-radius: 9999px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            margin: 0 auto;
+        }
+
+        .record-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .record-button i {
+            margin-right: 0.5rem;
+            font-size: 1.25rem;
+        }
+
+        /* 播放控件 */
+        .play-controls {
+            margin-top: 1.5rem;
+            width: 100%;
+            max-width: 28rem;
+            margin-left: auto;
+            margin-right: auto;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s ease;
+        }
+
+        .play-controls.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .time-display {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+        }
+
+        .time-text {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .progress-container {
+            height: 4px;
+            background-color: #e5e7eb;
+            border-radius: 2px;
+            cursor: pointer;
+            margin-bottom: 0.75rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background-color: var(--primary-color);
+            border-radius: 2px;
+            transition: width 0.1s ease;
+            width: 0;
+        }
+
+        .progress-hover {
+            position: absolute;
+            inset: 0;
+            background-color: rgba(59, 130, 246, 0.1);
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .progress-container:hover .progress-hover {
+            opacity: 1;
+        }
+
+        .control-buttons {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1.5rem;
+        }
+
+        .control-button {
+            width: 3.5rem;
+            height: 3.5rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: none;
+        }
+
+        .play-button {
+            background-color: var(--primary-color);
+            color: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .play-button:hover {
+            transform: scale(1.05);
+            background-color: rgba(59, 130, 246, 0.9);
+        }
+
+        .download-button {
+            background-color: #e5e7eb;
+            color: var(--text-secondary);
+        }
+
+        .download-button:hover {
+            transform: scale(1.05);
+            background-color: #d1d5db;
+        }
+
+        .control-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* 状态显示 */
+        .status-display {
+            margin-top: 2rem;
+            text-align: center;
+            display: none;
+        }
+
+        .status-display.visible {
+            display: block;
+            animation: scaleIn 0.5s ease-out forwards;
+        }
+
+        .status-text {
+            color: var(--text-secondary);
+            font-size: 1.125rem;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .status-text i {
+            margin-right: 0.5rem;
+        }
+
+        .progress-container {
+            width: 100%;
+            background-color: #e5e7eb;
+            border-radius: 9999px;
+            height: 0.625rem;
+            margin-bottom: 1rem;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background-color: var(--primary-color);
+            border-radius: 9999px;
+            transition: all 0.3s ease;
+            width: 0;
+        }
+
+        .progress-bar.pulse {
+            animation: pulse 2s infinite;
+        }
+
+        .progress-bar.bg-secondary {
+            background-color: var(--secondary-color);
+        }
+
+        /* 分数显示 */
+        .score-display {
+            margin-top: 1.5rem;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            max-width: 28rem;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .score-card {
+            background-color: var(--bg-secondary);
+            padding: 1rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+        }
+
+        .score-card:hover {
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .score-label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.25rem;
+        }
+
+        .score-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+
+        /* 结果容器 */
+        .result-container {
+            margin-bottom: 2rem;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        .result-section {
+            background-color: var(--bg-secondary);
+            padding: 1rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            margin-bottom: 1rem;
+        }
+
+        .result-title {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+        }
+
+        .result-title i {
+            margin-right: 0.25rem;
+        }
+
+        /* 单词分析 */
+        .word-item {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .word-item:hover {
+            background-color: var(--bg-secondary);
+            transform: translateX(5px);
+        }
+
+        .word-text {
+            font-weight: 500;
+            margin-right: 0.75rem;
+            color: var(--text-primary);
+        }
+
+        .word-phonetic {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-right: 0.75rem;
+        }
+
+        .score-badge {
+            padding: 0.25rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .score-badge:hover {
+            transform: scale(1.1);
+        }
+
+        .score-badge.good {
+            background-color: #D1FAE5;
+            color: #065F46;
+        }
+
+        .score-badge.warning {
+            background-color: #FEF3C7;
+            color: #92400E;
+        }
+
+        .score-badge.bad {
+            background-color: #FEE2E2;
+            color: #991B1B;
+        }
+
+        /* 建议列表 */
+        .suggestion-item {
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+        }
+
+        .suggestion-item i {
+            color: var(--primary-color);
+            margin-right: 0.25rem;
+        }
+
+        .suggestion-text {
+            font-weight: 500;
+        }
+
+        /* 音频可视化 */
+        .audio-visualizer {
+            margin-top: 2rem;
+            background-color: var(--bg-secondary);
+            padding: 1rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+
+        .visualizer-title {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+        }
+
+        .visualizer-title i {
+            margin-right: 0.25rem;
+        }
+
+        .visualizer-canvas {
+            width: 100%;
+            height: 6rem;
+            background-color: #e5e7eb;
+            border-radius: 0.5rem;
+        }
+
+        /* 页脚 */
+        .footer {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            margin-top: 2rem;
+        }
+
+        /* 动画 */
+        @keyframes floating {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-5px); }
+            100% { transform: translateY(0px); }
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        @keyframes scaleIn {
+            0% { transform: scale(0.9); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* iOS Safari 特定修复 */
+        @supports (-webkit-touch-callout: none) {
+            .container {
+                padding: 1rem;
             }
-            .audio-level {
-                height: 100%;
-                background-color: #3B82F6;
-                transition: width 0.1s ease;
+
+            .main-content {
+                padding: 1rem;
             }
-            .pulse {
-                animation: pulse 2s infinite;
+
+            .record-button {
+                padding: 0.75rem 1.5rem;
             }
-            @keyframes pulse {
-                0% { opacity: 1; }
-                50% { opacity: 0.5; }
-                100% { opacity: 1; }
+
+            .control-button {
+                width: 3rem;
+                height: 3rem;
             }
-            .play-controls {
-                opacity: 0;
-                transform: translateY(10px);
-                transition: all 0.3s ease;
+
+            .score-display {
+                grid-template-columns: 1fr;
+                gap: 0.75rem;
             }
-            .play-controls.visible {
-                opacity: 1;
-                transform: translateY(0);
-            }
-            .progress-bar-container {
-                height: 4px;
-                background-color: #e5e7eb;
-                border-radius: 2px;
-                cursor: pointer;
-            }
-            .progress-bar {
-                height: 100%;
-                background-color: #3B82F6;
-                border-radius: 2px;
-                transition: width 0.1s ease;
-            }
-            .word-item {
-                transition: all 0.3s ease;
-            }
-            .word-item:hover {
-                transform: translateX(5px);
-            }
-            .score-badge {
-                transition: all 0.3s ease;
-            }
-            .score-badge:hover {
-                transform: scale(1.1);
-            }
-            .floating {
-                animation: floating 3s ease-in-out infinite;
-            }
-            @keyframes floating {
-                0% { transform: translateY(0px); }
-                50% { transform: translateY(-5px); }
-                100% { transform: translateY(0px); }
-            }
-            .scale-in {
-                animation: scaleIn 0.5s ease-out forwards;
-            }
-            @keyframes scaleIn {
-                0% { transform: scale(0.9); opacity: 0; }
-                100% { transform: scale(1); opacity: 1; }
+
+            .form-input {
+                font-size: 16px; /* 防止 iOS 缩放 */
             }
         }
     </style>
@@ -100,55 +607,53 @@
 <body class="font-inter bg-gray-50 min-h-screen">
     <div class="container mx-auto px-4 py-8 max-w-4xl">
         <!-- 状态指示栏 -->
-        <div id="statusBar" class="bg-white rounded-lg shadow-md p-3 mb-6 flex items-center justify-between">
-            <div class="flex items-center space-x-2">
-                <div id="socketStatus" class="w-6 h-6 rounded-full bg-socket-disconnected"></div>
-                <span id="socketStatusText" class="text-sm text-gray-600">WebSocket 未连接</span>
+        <div class="status-bar">
+            <div class="socket-status">
+                <div id="socketStatus" class="socket-indicator"></div>
+                <span id="socketStatusText" class="socket-text">WebSocket 未连接</span>
             </div>
             <div class="audio-meter" id="audioMeter">
                 <div class="audio-level" id="audioLevel"></div>
             </div>
         </div>
 
-        <header class="text-center mb-10">
-            <div class="inline-block relative">
-                <h1 class="text-[clamp(1.8rem,4vw,2.5rem)] font-bold text-primary mb-4">
-                    语音评测系统
-                    <span class="inline-block w-2 h-2 bg-primary rounded-full floating ml-1"></span>
-                </h1>
-                <div class="absolute -bottom-1 left-0 w-full h-1 bg-primary/30 rounded-full"></div>
+        <header class="header">
+            <div class="title">
+                语音评测系统
+                <span class="title-dot"></span>
+                <div class="title-underline"></div>
             </div>
-            <p class="text-gray-600 text-lg">
+            <p class="subtitle">
                 使用腾讯云智聆口语评测技术，实时分析您的发音准确性和流利度
             </p>
         </header>
         
-        <main class="bg-white rounded-xl shadow-xl p-6 md:p-8 mb-8 transition-all duration-300 hover:shadow-2xl">
-            <div class="mb-8">
-                <h2 class="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-                    <i class="fa fa-cog text-primary mr-2"></i> 评测配置
+        <main class="main-content">
+            <div class="config-section">
+                <h2 class="section-title">
+                    <i class="fa fa-cog"></i> 评测配置
                 </h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                        <label for="referenceText" class="block text-sm font-medium text-gray-700 mb-1">
+                <div class="config-grid">
+                    <div class="form-group">
+                        <label for="referenceText" class="form-label">
                             参考文本
                         </label>
                         <textarea 
                             id="referenceText" 
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all resize-none"
+                            class="form-input form-textarea"
                             placeholder="输入需要评测的文本..."
                             rows="4"
                             required
                         >beautiful</textarea>
-                        <div class="text-xs text-gray-500 mt-1">请输入要评测的单词或句子</div>
+                        <div class="form-help">请输入要评测的单词或句子</div>
                     </div>
-                    <div>
-                        <label for="engineType" class="block text-sm font-medium text-gray-700 mb-1">
+                    <div class="form-group">
+                        <label for="engineType" class="form-label">
                             引擎类型
                         </label>
                         <select 
                             id="engineType" 
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all"
+                            class="form-input"
                         >
                             <option value="16k_en">16k英文</option>
                             <option value="8k_en">8k英文</option>
@@ -162,100 +667,100 @@
             <div class="flex flex-col items-center justify-center mb-8">
                 <button 
                     id="recordButton" 
-                    class="bg-gradient-to-r from-primary to-blue-700 text-white px-8 py-4 rounded-full shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1 focus:outline-none focus:ring-4 focus:ring-primary/30 flex items-center"
+                    class="record-button"
                 >
-                    <i class="fa fa-microphone mr-2 text-xl"></i>
+                    <i class="fa fa-microphone"></i>
                     <span>开始录音</span>
                 </button>
                 
-                <!-- 新增播放控件 -->
-                <div id="playControls" class="play-controls mt-6 w-full max-w-md">
-                    <div class="flex items-center justify-between mb-2">
-                        <span id="currentTime" class="text-xs text-gray-500">0:00</span>
-                        <span id="duration" class="text-xs text-gray-500">-0:00</span>
+                <!-- 播放控件 -->
+                <div id="playControls" class="play-controls">
+                    <div class="time-display">
+                        <span id="currentTime" class="time-text">0:00</span>
+                        <span id="duration" class="time-text">-0:00</span>
                     </div>
-                    <div class="progress-bar-container mb-3 group relative overflow-hidden" id="progressBarContainer">
+                    <div class="progress-container" id="progressBarContainer">
                         <div class="progress-bar" id="playProgressBar"></div>
-                        <div class="absolute inset-0 bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                        <div class="progress-hover"></div>
                     </div>
-                    <div class="flex items-center justify-center space-x-6">
+                    <div class="control-buttons">
                         <button 
                             id="playButton" 
-                            class="w-14 h-14 bg-primary text-white rounded-full shadow-md flex items-center justify-center hover:bg-primary/90 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                            class="control-button play-button"
                             disabled
                         >
-                            <i class="fa fa-play text-xl"></i>
+                            <i class="fa fa-play"></i>
                         </button>
                         <button 
                             id="downloadButton" 
-                            class="w-14 h-14 bg-gray-200 text-gray-700 rounded-full shadow-md flex items-center justify-center hover:bg-gray-300 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                            class="control-button download-button"
                             disabled
                         >
-                            <i class="fa fa-download text-xl"></i>
+                            <i class="fa fa-download"></i>
                         </button>
                     </div>
                 </div>
                 
-                <div id="statusDisplay" class="mt-8 text-center hidden scale-in">
-                    <div id="statusText" class="text-gray-700 text-lg mb-2 flex items-center justify-center">
-                        <i class="fa fa-circle-o-notch fa-spin mr-2"></i>
+                <div id="statusDisplay" class="status-display">
+                    <div id="statusText" class="status-text">
+                        <i class="fa fa-circle-o-notch fa-spin"></i>
                         <span>准备就绪</span>
                     </div>
-                    <div class="w-full bg-gray-200 rounded-full h-2.5 mb-4 overflow-hidden">
-                        <div id="progressBar" class="bg-primary h-2.5 rounded-full w-0 transition-all duration-300"></div>
+                    <div class="progress-container">
+                        <div id="progressBar" class="progress-bar"></div>
                     </div>
                     
-                    <div id="scoreDisplay" class="mt-6 grid grid-cols-3 gap-4 w-full max-w-md">
-                        <div class="bg-gray-50 p-4 rounded-lg shadow-sm hover:shadow transition-shadow">
-                            <div class="text-sm text-gray-500 mb-1">总体得分</div>
-                            <div id="overallScore" class="text-2xl font-bold text-primary">-</div>
+                    <div id="scoreDisplay" class="score-display">
+                        <div class="score-card">
+                            <div class="score-label">总体得分</div>
+                            <div id="overallScore" class="score-value">-</div>
                         </div>
-                        <div class="bg-gray-50 p-4 rounded-lg shadow-sm hover:shadow transition-shadow">
-                            <div class="text-sm text-gray-500 mb-1">发音准确度</div>
-                            <div id="accuracyScore" class="text-2xl font-bold text-secondary">-</div>
+                        <div class="score-card">
+                            <div class="score-label">发音准确度</div>
+                            <div id="accuracyScore" class="score-value">-</div>
                         </div>
-                        <div class="bg-gray-50 p-4 rounded-lg shadow-sm hover:shadow transition-shadow">
-                            <div class="text-sm text-gray-500 mb-1">流利度</div>
-                            <div id="fluencyScore" class="text-2xl font-bold text-accent">-</div>
+                        <div class="score-card">
+                            <div class="score-label">流利度</div>
+                            <div id="fluencyScore" class="score-value">-</div>
                         </div>
                     </div>
                 </div>
             </div>
             
-            <div id="resultContainer" class="mb-8 opacity-0 transition-opacity duration-500">
-                <h2 class="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-                    <i class="fa fa-list-alt text-primary mr-2"></i> 详细结果
+            <div id="resultContainer" class="result-container">
+                <h2 class="section-title">
+                    <i class="fa fa-list-alt"></i> 详细结果
                 </h2>
                 
-                <div class="bg-gray-50 p-4 rounded-lg shadow-sm">
-                    <div class="text-sm font-medium text-gray-700 mb-2 flex items-center">
-                        <i class="fa fa-comment-o mr-1"></i> 单词分析
+                <div class="result-section">
+                    <div class="result-title">
+                        <i class="fa fa-comment-o"></i> 单词分析
                     </div>
-                    <div id="wordsAnalysis" class="space-y-2">
+                    <div id="wordsAnalysis" class="words-analysis">
                         <!-- 结果将在这里动态生成 -->
                     </div>
                 </div>
                 
-                <div class="mt-4 bg-gray-50 p-4 rounded-lg shadow-sm">
-                    <div class="text-sm font-medium text-gray-700 mb-2 flex items-center">
-                        <i class="fa fa-lightbulb-o mr-1"></i> 改进建议
+                <div class="result-section">
+                    <div class="result-title">
+                        <i class="fa fa-lightbulb-o"></i> 改进建议
                     </div>
-                    <div id="suggestions" class="text-gray-700 space-y-2">
+                    <div id="suggestions" class="suggestions">
                         <!-- 建议将在这里动态生成 -->
                     </div>
                 </div>
             </div>
             
-            <!-- 新增音频分析区域 -->
-            <div class="mt-8 bg-gray-50 p-4 rounded-lg shadow-sm">
-                <h3 class="text-sm font-medium text-gray-700 mb-2 flex items-center">
-                    <i class="fa fa-area-chart mr-1"></i> 实时音频分析
+            <!-- 音频分析区域 -->
+            <div class="audio-visualizer">
+                <h3 class="visualizer-title">
+                    <i class="fa fa-area-chart"></i> 实时音频分析
                 </h3>
-                <canvas id="audioVisualizer" class="w-full h-24 bg-gray-200 rounded-lg"></canvas>
+                <canvas id="audioVisualizer" class="visualizer-canvas"></canvas>
             </div>
         </main>
         
-        <footer class="text-center text-gray-500 text-sm mt-8">
+        <footer class="footer">
             <p>© 2025 语音评测系统 | 使用腾讯云智聆口语评测技术</p>
         </footer>
     </div>
@@ -268,7 +773,7 @@
         let socketReconnectTimer = null;
         const RECONNECT_INTERVAL = 5000; // 5秒重连间隔
         
-        // 新增：录音播放相关变量
+        // 录音播放相关变量
         let audioBlob = null;
         let audioUrl = null;
         let audioElement = null;
@@ -315,7 +820,7 @@
                     const self = this; // 保存对this的引用
 
                     this.socket.onopen = () => {
-                        socketStatus.style.backgroundColor = '#059669';
+                        socketStatus.style.backgroundColor = 'var(--socket-connected)';
                         socketStatusText.textContent = 'WebSocket 已连接';
                         self.sendConfig();
                         self.autoReconnectClear();
@@ -331,13 +836,15 @@
                     };
 
                     this.socket.onclose = (event) => {
-                        socketStatus.style.backgroundColor = '#dc2626';
+                        socketStatus.style.backgroundColor = 'var(--socket-disconnected)';
                         socketStatusText.textContent = `WebSocket 断开 (${event.code})`;
                     };
 
                     this.socket.onerror = (error) => {
                         console.error('WebSocket 错误:', error);
-                        self.socket.close();
+                        if (self.socket) {
+                            self.socket.close();
+                        }
                     };
                 },
 
@@ -346,11 +853,13 @@
                         ref_text: referenceText.value.trim(),
                         server_engine_type: engineType.value
                     };
-                    if (config.ref_text) this.socket.send(JSON.stringify(config));
+                    if (config.ref_text && this.socket) {
+                        this.socket.send(JSON.stringify(config));
+                    }
                 },
 
                 sendAudioData(data) {
-                    if (this.socket?.readyState === WebSocket.OPEN) {
+                    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
                         // 确保音频数据长度为偶数
                         if (data instanceof ArrayBuffer && data.byteLength % 2 !== 0) {
                             const view = new Uint8Array(data);
@@ -365,11 +874,15 @@
                 },
                 
                 autoReconnectClear() {
-                    clearTimeout(socketReconnectTimer);
+                    if (socketReconnectTimer) {
+                        clearTimeout(socketReconnectTimer);
+                    }
                 },
 
                 close() {
-                    this.socket?.close();
+                    if (this.socket) {
+                        this.socket.close();
+                    }
                     this.autoReconnectClear();
                 }
             };
@@ -380,7 +893,7 @@
                 mediaRecorder: null,
                 audioInput: null,
                 mimeType: null,
-                audioChunks: [], // 新增：存储录音数据块
+                audioChunks: [],
                 
                 async start() {
                     if (!await this.checkPermissions()) return;
@@ -388,13 +901,14 @@
                     if (!await this.requestMicrophonePermission()) return;
                     
                     this.isRecording = true;
-                    recordButton.classList.remove('from-primary', 'to-blue-700');
-                    recordButton.classList.add('from-danger', 'to-red-700');
-                    recordButton.innerHTML = '<i class="fa fa-stop mr-2 text-xl"></i><span>停止录音</span>';
-                    statusText.innerHTML = '<i class="fa fa-microphone mr-2"></i><span>正在录音...</span>';
+                    recordButton.classList.remove('record-button');
+                    recordButton.classList.add('record-button', 'recording');
+                    recordButton.innerHTML = '<i class="fa fa-stop"></i><span>停止录音</span>';
+                    statusText.innerHTML = '<i class="fa fa-microphone"></i><span>正在录音...</span>';
                     progressBar.style.width = '50%';
                     progressBar.classList.add('pulse');
                     statusDisplay.classList.remove('hidden');
+                    statusDisplay.classList.add('visible');
                     
                     // 重置结果区域
                     this.resetResultDisplay();
@@ -501,10 +1015,10 @@
 
                 stop() {
                     this.isRecording = false;
-                    recordButton.classList.remove('from-danger', 'to-red-700');
-                    recordButton.classList.add('from-primary', 'to-blue-700');
-                    recordButton.innerHTML = '<i class="fa fa-microphone mr-2 text-xl"></i><span>开始录音</span>';
-                    statusText.innerHTML = '<i class="fa fa-cog fa-spin mr-2"></i><span>录音已停止，正在处理...</span>';
+                    recordButton.classList.remove('record-button', 'recording');
+                    recordButton.classList.add('record-button');
+                    recordButton.innerHTML = '<i class="fa fa-microphone"></i><span>开始录音</span>';
+                    statusText.innerHTML = '<i class="fa fa-cog fa-spin"></i><span>录音已停止，正在处理...</span>';
                     progressBar.style.width = '75%';
                     progressBar.classList.remove('pulse');
                     
@@ -529,8 +1043,8 @@
                         return true;
                     } catch (error) {
                         console.error('初始化 AudioContext 失败:', error);
-                        statusText.innerHTML = '<i class="fa fa-exclamation-triangle mr-2"></i><span>浏览器不支持音频处理功能</span>';
-                        statusText.classList.add('text-danger');
+                        statusText.innerHTML = '<i class="fa fa-exclamation-triangle"></i><span>浏览器不支持音频处理功能</span>';
+                        statusText.classList.add('error');
                         return false;
                     }
                 },
@@ -539,8 +1053,8 @@
                     // 检测支持的MIME类型
                     this.mimeType = this.getSupportedMimeType();
                     if (!this.mimeType) {
-                        statusText.innerHTML = '<i class="fa fa-exclamation-triangle mr-2"></i><span>浏览器不支持任何可用的音频格式</span>';
-                        statusText.classList.add('text-danger');
+                        statusText.innerHTML = '<i class="fa fa-exclamation-triangle"></i><span>浏览器不支持任何可用的音频格式</span>';
+                        statusText.classList.add('error');
                         return false;
                     }
                     
@@ -558,13 +1072,13 @@
                                 });
                             } catch (error) {
                                 console.error('创建 MediaRecorder 失败:', error);
-                                statusText.innerHTML = '<i class="fa fa-exclamation-triangle mr-2"></i><span>无法初始化录音功能</span>';
-                                statusText.classList.add('text-danger');
+                                statusText.innerHTML = '<i class="fa fa-exclamation-triangle"></i><span>无法初始化录音功能</span>';
+                                statusText.classList.add('error');
                                 this.cleanup();
                                 return false;
                             }
                             
-                            // 新增：收集录音数据
+                            // 收集录音数据
                             this.mediaRecorder.ondataavailable = (event) => {
                                 if (event.data.size > 0) {
                                     this.audioChunks.push(event.data);
@@ -575,7 +1089,9 @@
                                         
                                         // 更新音频电平
                                         const audioLevelValue = this.getAudioLevel();
-                                        audioLevel.style.width = `${audioLevelValue}%`;
+                                        if (audioLevel) {
+                                            audioLevel.style.width = `${audioLevelValue}%`;
+                                        }
                                     });
                                 }
                             };
@@ -583,17 +1099,19 @@
                             this.mediaRecorder.onstop = () => {
                                 console.log('MediaRecorder 已停止');
                                 
-                                // 新增：处理录音完成
+                                // 处理录音完成
                                 this.processRecording();
                                 
-                                stream.getTracks().forEach(track => track.stop());
+                                if (stream) {
+                                    stream.getTracks().forEach(track => track.stop());
+                                }
                                 this.cleanup();
                             };
                             
                             this.mediaRecorder.onerror = (error) => {
                                 console.error('MediaRecorder 错误:', error);
-                                statusText.innerHTML = `<i class="fa fa-exclamation-triangle mr-2"></i><span>录音错误: ${error.message}</span>`;
-                                statusText.classList.add('text-danger');
+                                statusText.innerHTML = `<i class="fa fa-exclamation-triangle"></i><span>录音错误: ${error.message}</span>`;
+                                statusText.classList.add('error');
                                 this.cleanup();
                             };
                             
@@ -602,8 +1120,8 @@
                         })
                         .catch(error => {
                             console.error('麦克风权限获取失败:', error);
-                            statusText.innerHTML = '<i class="fa fa-exclamation-triangle mr-2"></i><span>请允许访问麦克风</span>';
-                            statusText.classList.add('text-danger');
+                            statusText.innerHTML = '<i class="fa fa-exclamation-triangle"></i><span>请允许访问麦克风</span>';
+                            statusText.classList.add('error');
                             this.cleanup();
                             return false;
                         });
@@ -701,7 +1219,9 @@
                 },
 
                 stopVisualization() {
-                    audioContext?.suspend();
+                    if (audioContext) {
+                        audioContext.suspend();
+                    }
                 },
 
                 getAudioLevel() {
@@ -729,19 +1249,26 @@
                 cleanup() {
                     console.log('清理录音资源');
                     this.mediaRecorder = null;
-                    this.audioInput?.disconnect();
-                    mediaStream?.getTracks().forEach(track => track.stop());
-                    audioContext?.close();
-                    audioContext = null;
+                    if (this.audioInput) {
+                        this.audioInput.disconnect();
+                    }
+                    if (mediaStream) {
+                        mediaStream.getTracks().forEach(track => track.stop());
+                    }
+                    if (audioContext) {
+                        audioContext.close();
+                        audioContext = null;
+                    }
                 },
                 
-                // 新增：处理录音完成
                 processRecording() {
                     if (this.audioChunks.length === 0) {
                         console.warn('没有录音数据');
-                        statusText.innerHTML = '<i class="fa fa-exclamation-triangle mr-2"></i><span>没有检测到录音数据</span>';
-                        statusText.classList.add('text-danger');
-                        progressBar.style.width = '0%';
+                        statusText.innerHTML = '<i class="fa fa-exclamation-triangle"></i><span>没有检测到录音数据</span>';
+                        statusText.classList.add('error');
+                        if (progressBar) {
+                            progressBar.style.width = '0%';
+                        }
                         return;
                     }
                     
@@ -758,7 +1285,6 @@
                     this.showPlayControls();
                 },
                 
-                // 新增：初始化音频元素
                 initAudioElement() {
                     // 如果已有音频元素，先释放资源
                     if (audioElement) {
@@ -773,7 +1299,9 @@
                     audioElement.onloadedmetadata = () => {
                         // 更新音频时长显示
                         const durationText = formatTime(audioElement.duration);
-                        duration.textContent = `-${durationText}`;
+                        if (duration) {
+                            duration.textContent = `-${durationText}`;
+                        }
                     };
                     
                     // 设置播放位置更新时的回调
@@ -789,41 +1317,54 @@
                     // 设置播放错误时的回调
                     audioElement.onerror = () => {
                         console.error('音频播放错误:', audioElement.error);
-                        statusText.innerHTML = '<i class="fa fa-exclamation-triangle mr-2"></i><span>音频播放错误</span>';
-                        statusText.classList.add('text-danger');
+                        statusText.innerHTML = '<i class="fa fa-exclamation-triangle"></i><span>音频播放错误</span>';
+                        statusText.classList.add('error');
                         this.onPlayEnd();
                     };
                 },
                 
-                // 新增：显示播放控件
                 showPlayControls() {
-                    playControls.classList.add('visible');
-                    playButton.disabled = false;
-                    downloadButton.disabled = false;
+                    if (playControls) {
+                        playControls.classList.add('visible');
+                    }
+                    if (playButton) {
+                        playButton.disabled = false;
+                    }
+                    if (downloadButton) {
+                        downloadButton.disabled = false;
+                    }
                 },
                 
-                // 新增：更新播放进度
                 updatePlayProgress() {
                     if (!audioElement) return;
                     
                     const percent = (audioElement.currentTime / audioElement.duration) * 100;
-                    playProgressBar.style.width = `${percent}%`;
+                    if (playProgressBar) {
+                        playProgressBar.style.width = `${percent}%`;
+                    }
                     
                     // 更新当前时间显示
                     const currentTimeText = formatTime(audioElement.currentTime);
-                    currentTime.textContent = currentTimeText;
+                    if (currentTime) {
+                        currentTime.textContent = currentTimeText;
+                    }
                 },
                 
-                // 新增：播放结束处理
                 onPlayEnd() {
                     isPlaying = false;
-                    playButton.innerHTML = '<i class="fa fa-play text-xl"></i>';
-                    playProgressBar.style.width = '0%';
-                    currentTime.textContent = '0:00';
+                    if (playButton) {
+                        playButton.innerHTML = '<i class="fa fa-play"></i>';
+                    }
+                    if (playProgressBar) {
+                        playProgressBar.style.width = '0%';
+                    }
+                    if (currentTime) {
+                        currentTime.textContent = '0:00';
+                    }
                 }
             };
             
-            // 新增：格式化时间为 MM:SS 格式
+            // 格式化时间为 MM:SS 格式
             function formatTime(seconds) {
                 if (isNaN(seconds)) return '0:00';
                 
@@ -833,29 +1374,33 @@
                 return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
             }
             
-            // 新增：播放/暂停录音
+            // 播放/暂停录音
             function togglePlay() {
                 if (!audioElement) return;
                 
                 if (isPlaying) {
                     // 暂停播放
                     audioElement.pause();
-                    playButton.innerHTML = '<i class="fa fa-play text-xl"></i>';
+                    if (playButton) {
+                        playButton.innerHTML = '<i class="fa fa-play"></i>';
+                    }
                 } else {
                     // 开始播放
                     audioElement.play().then(() => {
-                        playButton.innerHTML = '<i class="fa fa-pause text-xl"></i>';
+                        if (playButton) {
+                            playButton.innerHTML = '<i class="fa fa-pause"></i>';
+                        }
                     }).catch(error => {
                         console.error('播放失败:', error);
-                        statusText.innerHTML = `<i class="fa fa-exclamation-triangle mr-2"></i><span>播放失败: ${error.message}</span>`;
-                        statusText.classList.add('text-danger');
+                        statusText.innerHTML = `<i class="fa fa-exclamation-triangle"></i><span>播放失败: ${error.message}</span>`;
+                        statusText.classList.add('error');
                     });
                 }
                 
                 isPlaying = !isPlaying;
             }
             
-            // 新增：下载录音
+            // 下载录音
             function downloadAudio() {
                 if (!audioBlob) return;
                 
@@ -869,7 +1414,7 @@
                 URL.revokeObjectURL(url);
             }
             
-            // 新增：跳转到播放位置
+            // 跳转到播放位置
             function seekToPosition(event) {
                 if (!audioElement) return;
                 
@@ -887,19 +1432,19 @@
                 
                 switch (data.status) {
                     case 'start':
-                        statusText.innerHTML = '<i class="fa fa-cog fa-spin mr-2"></i><span>开始评测...</span>';
+                        statusText.innerHTML = '<i class="fa fa-cog fa-spin"></i><span>开始评测...</span>';
                         break;
                         
                     case 'intermediate':
                         // 更新中间结果
                         updateResults(data.result);
-                        statusText.innerHTML = '<i class="fa fa-cog fa-spin mr-2"></i><span>正在分析...</span>';
+                        statusText.innerHTML = '<i class="fa fa-cog fa-spin"></i><span>正在分析...</span>';
                         break;
                         
                     case 'complete':
                         // 更新最终结果
                         updateResults(data.result);
-                        statusText.innerHTML = '<i class="fa fa-check mr-2"></i><span>评测完成</span>';
+                        statusText.innerHTML = '<i class="fa fa-check"></i><span>评测完成</span>';
                         progressBar.style.width = '100%';
                         progressBar.classList.remove('pulse');
                         progressBar.classList.add('bg-secondary');
@@ -912,8 +1457,8 @@
                         
                     case 'error':
                         console.error('评测错误:', data.error);
-                        statusText.innerHTML = `<i class="fa fa-exclamation-triangle mr-2"></i><span>错误: ${data.error}</span>`;
-                        statusText.classList.add('text-danger');
+                        statusText.innerHTML = `<i class="fa fa-exclamation-triangle"></i><span>错误: ${data.error}</span>`;
+                        statusText.classList.add('error');
                         progressBar.style.width = '0%';
                         recordingManager.cleanup();
                         break;
@@ -953,24 +1498,24 @@
                 
                 words.forEach((word, index) => {
                     const wordElement = document.createElement('div');
-                    wordElement.className = 'word-item flex flex-wrap items-center p-2 rounded-lg hover:bg-gray-100 transition-all';
+                    wordElement.className = 'word-item';
                     wordElement.style.animation = `scaleIn 0.3s ease-out forwards ${index * 0.1}s`;
                     wordElement.style.opacity = '0';
                     
                     // 单词文本
                     const wordText = document.createElement('span');
-                    wordText.className = 'font-medium mr-3 text-gray-800';
+                    wordText.className = 'word-text';
                     wordText.textContent = word.W;
                     
                     // 音标
                     const phonetic = document.createElement('span');
-                    phonetic.className = 'text-sm text-gray-500 mr-3';
+                    phonetic.className = 'word-phonetic';
                     phonetic.textContent = word.P;
                     
                     // 得分
                     const score = document.createElement('span');
                     const scoreValue = parseFloat(word.S);
-                    score.className = `score-badge px-2 py-1 rounded-full text-xs font-semibold ${getScoreColorClass(scoreValue)}`;
+                    score.className = `score-badge ${getScoreClass(scoreValue)}`;
                     score.textContent = scoreValue.toFixed(1);
                     
                     wordElement.appendChild(wordText);
@@ -981,6 +1526,13 @@
                 });
             }
             
+            // 根据分数获取类名
+            function getScoreClass(score) {
+                if (score >= 85) return 'good';
+                if (score >= 60) return 'warning';
+                return 'bad';
+            }
+
             // 生成建议
             function generateSuggestions(result) {
                 suggestions.innerHTML = '';
@@ -1040,13 +1592,6 @@
                     
                     suggestions.appendChild(completenessSuggestion);
                 }
-            }
-            
-            // 根据分数获取颜色类
-            function getScoreColorClass(score) {
-                if (score >= 85) return 'bg-green-100 text-green-800';
-                if (score >= 60) return 'bg-yellow-100 text-yellow-800';
-                return 'bg-red-100 text-red-800';
             }
 
             // 按钮事件处理
