@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"lingolift/config"
 	"lingolift/pkg/speech"
@@ -51,9 +52,32 @@ func StreamAssessment(c echo.Context) error {
 	log.Printf("等待接受的音频类型: %s", mimeType)
 
 	// 读取初始配置消息
-	_, message, err := conn.ReadMessage()
+	mt, message, err := conn.ReadMessage()
 	if err != nil {
 		log.Printf("Read initial message error: %v", err)
+		return nil
+	}
+
+	// 确保是文本消息
+	if mt != websocket.TextMessage {
+		log.Printf("Initial message is not text type: %d", mt)
+		conn.WriteJSON(speech.AssessmentResponse{
+			Status: "error",
+			Error:  "初始配置必须是JSON文本消息",
+		})
+		return nil
+	}
+
+	// 调试输出原始消息
+	log.Printf("原始配置消息: %s", string(message))
+
+	// 检查消息是否包含UTF-8编码
+	if !utf8.Valid(message) {
+		log.Printf("配置消息包含非UTF-8编码")
+		conn.WriteJSON(speech.AssessmentResponse{
+			Status: "error",
+			Error:  "配置消息格式错误，请检查编码",
+		})
 		return nil
 	}
 
@@ -63,7 +87,7 @@ func StreamAssessment(c echo.Context) error {
 		log.Printf("Parse config error: %v", err)
 		conn.WriteJSON(speech.AssessmentResponse{
 			Status: "error",
-			Error:  "Invalid configuration",
+			Error:  "音频有错误，重新录制即可",
 		})
 		return nil
 	}
