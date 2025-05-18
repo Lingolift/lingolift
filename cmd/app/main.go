@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"lingolift/config"
+	"lingolift/job"
 	"lingolift/pkg/log"
 	"lingolift/server"
 
@@ -15,6 +16,7 @@ import (
 
 // initLibraries 初始化库
 func initLibraries(cfg *config.LingoLiftConfig, logger *zap.Logger) (err error) {
+	go job.HealthCheck()
 	return
 }
 
