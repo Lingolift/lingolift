@@ -1,1756 +1,919 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<html lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>语音评测系统</title>
-    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <!-- 引入Vue最新版本 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/xiangyuecn/Recorder@1.3.25011100/recorder.wav.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/xiangyuecn/Recorder@1.3.25011100/dist/extensions/waveview.js"></script>
     <style>
-        :root {
-            --primary-color: #3B82F6;
-            --secondary-color: #10B981;
-            --accent-color: #F59E0B;
-            --danger-color: #EF4444;
-            --socket-connected: #059669;
-            --socket-disconnected: #dc2626;
-            --text-primary: #1F2937;
-            --text-secondary: #4B5563;
-            --bg-primary: #F9FAFB;
-            --bg-secondary: #F3F4F6;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background-color: var(--bg-primary);
-            min-height: 100vh;
-            color: var(--text-primary);
-            line-height: 1.5;
-        }
-
-        .container {
-            max-width: 896px;
-            margin: 0 auto;
-            padding: 2rem 1rem;
-        }
-
-        /* 状态指示栏 */
-        .status-bar {
-            background-color: white;
-            border-radius: 0.5rem;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-            padding: 0.75rem;
-            margin-bottom: 1.5rem;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .socket-status {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .socket-indicator {
-            width: 1.5rem;
-            height: 1.5rem;
-            border-radius: 50%;
-            background-color: var(--socket-disconnected);
-        }
-
-        .socket-text {
-            font-size: 0.875rem;
-            color: var(--text-secondary);
-        }
-
-        /* 音频电平表 */
-        .audio-meter {
-            height: 10px;
-            background-color: #e5e7eb;
-            border-radius: 5px;
-            width: 200px;
-        }
-
-        .audio-level {
-            height: 100%;
-            background-color: var(--primary-color);
-            transition: width 0.1s ease;
-            width: 0;
-        }
-
-        /* 标题区域 */
-        .header {
-            text-align: center;
-            margin-bottom: 2.5rem;
-        }
-
-        .title {
-            font-size: clamp(1.8rem, 4vw, 2.5rem);
-            font-weight: bold;
-            color: var(--primary-color);
-            margin-bottom: 1rem;
-            position: relative;
-            display: inline-block;
-        }
-
-        .title-dot {
-            display: inline-block;
-            width: 0.5rem;
-            height: 0.5rem;
-            background-color: var(--primary-color);
-            border-radius: 50%;
-            margin-left: 0.25rem;
-            animation: floating 3s ease-in-out infinite;
-        }
-
-        .title-underline {
-            position: absolute;
-            bottom: -0.25rem;
-            left: 0;
-            width: 100%;
-            height: 0.25rem;
-            background-color: rgba(59, 130, 246, 0.3);
-            border-radius: 9999px;
-        }
-
-        .subtitle {
-            color: var(--text-secondary);
-            font-size: 1.125rem;
-        }
-
-        /* 主内容区域 */
-        .main-content {
-            background-color: white;
-            border-radius: 0.75rem;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            padding: 1.5rem;
-            margin-bottom: 2rem;
-            transition: all 0.3s ease;
-        }
-
-        .main-content:hover {
-            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
-        }
-
-        /* 评测配置区域 */
-        .config-section {
-            margin-bottom: 2rem;
-        }
-
-        .section-title {
-            font-size: 1.25rem;
-            font-weight: 600;
-            color: var(--text-primary);
-            margin-bottom: 1rem;
-            display: flex;
-            align-items: center;
-        }
-
-        .section-title i {
-            color: var(--primary-color);
-            margin-right: 0.5rem;
-        }
-
-        .config-grid {
-            display: flex;
-        }
-
-        @media (min-width: 768px) {
-            .config-grid {
-                grid-template-columns: 1fr 1fr;
-            }
-        }
-
-        .form-group {
-            margin-bottom: 1rem;
-            width: 100%;
-        }
-
-        .form-label {
-            display: block;
-            font-size: 0.875rem;
-            font-weight: 500;
-            color: var(--text-secondary);
-            margin-bottom: 0.25rem;
-        }
-
-        .form-input {
-            width: 100%;
-            padding: 0.5rem 1rem;
-            border: 1px solid #D1D5DB;
-            border-radius: 0.5rem;
-            font-size: 1rem;
-            transition: all 0.2s ease;
-        }
-
-        .form-input:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-        }
-
-        .form-textarea {
-            resize: none;
-            min-height: 100px;
-        }
-
-        .form-help {
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-            margin-top: 0.25rem;
-        }
-
-        /* 录音按钮 */
-        .record-button {
-            background: linear-gradient(to right, var(--primary-color), #1D4ED8);
-            color: white;
-            padding: 1rem 2rem;
-            border-radius: 9999px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            border: none;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1rem;
-            transition: all 0.3s ease;
-            margin: 0 auto;
-        }
-
-        .record-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
-        }
-
-        .record-button i {
-            margin-right: 0.5rem;
-            font-size: 1.25rem;
-        }
-
-        /* 播放控件 */
-        .play-controls {
-            margin-top: 1.5rem;
-            width: 100%;
-            max-width: 28rem;
-            margin-left: auto;
-            margin-right: auto;
-            /* opacity: 0; */
-            display: none;
-            transform: translateY(10px);
-            transition: all 0.3s ease;
-        }
-
-        .play-controls.visible {
-            /* opacity: 1; */
-            display: block;
-            transform: translateY(0);
-        }
-
-        .time-display {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 0.5rem;
-        }
-
-        .time-text {
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-        }
-
-        .progress-container {
-            height: 4px;
-            background-color: #e5e7eb;
-            border-radius: 2px;
-            cursor: pointer;
-            margin-bottom: 0.75rem;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .progress-bar {
-            height: 100%;
-            background-color: var(--primary-color);
-            border-radius: 2px;
-            transition: width 0.1s ease;
-            width: 0;
-        }
-
-        .progress-hover {
-            position: absolute;
-            inset: 0;
-            background-color: rgba(59, 130, 246, 0.1);
-            opacity: 0;
-            transition: opacity 0.2s ease;
-        }
-
-        .progress-container:hover .progress-hover {
-            opacity: 1;
-        }
-
-        .control-buttons {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 1.5rem;
-        }
-
-        .control-button {
-            width: 3.5rem;
-            height: 3.5rem;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            border: none;
-        }
-
-        .play-button {
-            background-color: var(--primary-color);
-            color: white;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .play-button:hover {
-            transform: scale(1.05);
-            background-color: rgba(59, 130, 246, 0.9);
-        }
-
-        .download-button {
-            background-color: #e5e7eb;
-            color: var(--text-secondary);
-        }
-
-        .download-button:hover {
-            transform: scale(1.05);
-            background-color: #d1d5db;
-        }
-
-        .control-button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        /* 状态显示 */
-        .status-display {
-            margin-top: 2rem;
-            text-align: center;
-            display: none;
-        }
-
-        .status-display.visible {
-            display: block;
-            animation: scaleIn 0.5s ease-out forwards;
-        }
-
-        .status-text {
-            color: var(--text-secondary);
-            font-size: 1.125rem;
-            margin-bottom: 0.5rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .status-text i {
-            margin-right: 0.5rem;
-        }
-
-        .progress-container {
-            width: 100%;
-            background-color: #e5e7eb;
-            border-radius: 9999px;
-            height: 0.625rem;
-            margin-bottom: 1rem;
-            overflow: hidden;
-        }
-
-        .progress-bar {
-            height: 100%;
-            background-color: var(--primary-color);
-            border-radius: 9999px;
-            transition: all 0.3s ease;
-            width: 0;
-        }
-
-        .progress-bar.pulse {
-            animation: pulse 2s infinite;
-        }
-
-        .progress-bar.bg-secondary {
-            background-color: var(--secondary-color);
-        }
-
-        /* 分数显示 */
-        .score-display {
-            margin-top: 1.5rem;
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 1rem;
-            max-width: 28rem;
-            margin-left: auto;
-            margin-right: auto;
-        }
-
-        .score-card {
-            background-color: var(--bg-secondary);
-            padding: 1rem;
-            border-radius: 0.5rem;
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-            transition: all 0.3s ease;
-        }
-
-        .score-card:hover {
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .score-label {
-            font-size: 0.875rem;
-            color: var(--text-secondary);
-            margin-bottom: 0.25rem;
-        }
-
-        .score-value {
-            font-size: 1.5rem;
-            font-weight: bold;
-            color: var(--primary-color);
-        }
-
-        /* 结果容器 */
-        .result-container {
-            margin-bottom: 2rem;
-            /* opacity: 0; */
-            display: none;
-            transition: opacity 0.5s ease;
-        }
-
-        .result-section {
-            background-color: var(--bg-secondary);
-            padding: 1rem;
-            border-radius: 0.5rem;
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-            margin-bottom: 1rem;
-        }
-
-        .result-title {
-            font-size: 0.875rem;
-            font-weight: 500;
-            color: var(--text-primary);
-            margin-bottom: 0.5rem;
-            display: flex;
-            align-items: center;
-        }
-
-        .result-title i {
-            margin-right: 0.25rem;
-        }
-
-        /* 单词分析 */
-        .word-item {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            padding: 0.5rem;
-            border-radius: 0.5rem;
-            transition: all 0.3s ease;
-        }
-
-        .word-item:hover {
-            background-color: var(--bg-secondary);
-            transform: translateX(5px);
-        }
-
-        .word-text {
-            font-weight: 500;
-            margin-right: 0.75rem;
-            color: var(--text-primary);
-        }
-
-        .word-phonetic {
-            font-size: 0.875rem;
-            color: var(--text-secondary);
-            margin-right: 0.75rem;
-        }
-
-        .score-badge {
-            padding: 0.25rem 0.5rem;
-            border-radius: 9999px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            transition: all 0.3s ease;
-        }
-
-        .score-badge:hover {
-            transform: scale(1.1);
-        }
-
-        .score-badge.good {
-            background-color: #D1FAE5;
-            color: #065F46;
-        }
-
-        .score-badge.warning {
-            background-color: #FEF3C7;
-            color: #92400E;
-        }
-
-        .score-badge.bad {
-            background-color: #FEE2E2;
-            color: #991B1B;
-        }
-
-        /* 建议列表 */
-        .suggestion-item {
-            color: var(--text-primary);
-            margin-bottom: 0.5rem;
-        }
-
-        .suggestion-item i {
-            color: var(--primary-color);
-            margin-right: 0.25rem;
-        }
-
-        .suggestion-text {
-            font-weight: 500;
-        }
-
-        /* 音频可视化 */
-        .audio-visualizer {
-            margin-top: 2rem;
-            background-color: var(--bg-secondary);
-            padding: 1rem;
-            border-radius: 0.5rem;
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-        }
-
-        .visualizer-title {
-            font-size: 0.875rem;
-            font-weight: 500;
-            color: var(--text-primary);
-            margin-bottom: 0.5rem;
-            display: flex;
-            align-items: center;
-        }
-
-        .visualizer-title i {
-            margin-right: 0.25rem;
-        }
-
-        .visualizer-canvas {
-            width: 100%;
-            height: 6rem;
-            background-color: #e5e7eb;
-            border-radius: 0.5rem;
-        }
-
-        /* 页脚 */
-        .footer {
-            text-align: center;
-            color: var(--text-secondary);
-            font-size: 0.875rem;
-            margin-top: 2rem;
-        }
-
-        /* 动画 */
-        @keyframes floating {
-            0% { transform: translateY(0px); }
-            50% { transform: translateY(-5px); }
-            100% { transform: translateY(0px); }
-        }
-
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-        }
-
-        @keyframes scaleIn {
-            0% { transform: scale(0.9); opacity: 0; }
-            100% { transform: scale(1); opacity: 1; }
-        }
-
-        /* iOS Safari 特定修复 */
-        @supports (-webkit-touch-callout: none) {
-            .container {
-                padding: 1rem;
-            }
-
-            .main-content {
-                padding: 1rem;
-            }
-
-            .record-button {
-                padding: 0.75rem 1.5rem;
-            }
-
-            .control-button {
-                width: 3rem;
-                height: 3rem;
-            }
-
-            .score-display {
-                grid-template-columns: 1fr;
-                gap: 0.75rem;
-            }
-
-            .form-input {
-                font-size: 16px; /* 防止 iOS 缩放 */
-            }
-        }
+      body {
+        font-family: "Arial", sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      h1 {
+        text-align: center;
+        color: #333;
+      }
+      .container {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+      textarea {
+        width: 100%;
+        min-height: 120px;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        resize: vertical;
+      }
+      button {
+        padding: 10px 20px;
+        background-color: #4caf50;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        transition: background-color 0.3s;
+      }
+      button:hover {
+        background-color: #45a049;
+      }
+      .recording-button.recording {
+        background-color: #f44336;
+      }
+      .audio-player {
+        width: 100%;
+        margin-top: 10px;
+      }
+      .status {
+        padding: 10px;
+        border-radius: 4px;
+        background-color: #f5f5f5;
+        margin: 10px 0;
+      }
+      .result-section {
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 15px;
+        margin-bottom: 20px;
+      }
+      .result-section h3 {
+        margin-top: 0;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 10px;
+      }
+      .score-overview {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 20px;
+      }
+      .score-card {
+        flex: 1;
+        text-align: center;
+        padding: 10px;
+        background-color: #f9f9f9;
+        border-radius: 4px;
+        margin: 0 5px;
+      }
+      .score-card h4 {
+        margin: 0 0 10px 0;
+      }
+      .score-value {
+        font-size: 24px;
+        font-weight: bold;
+        color: #4caf50;
+      }
+      .word-analysis {
+        margin-top: 20px;
+      }
+      .word-item {
+        padding: 8px;
+        margin-bottom: 5px;
+        border-radius: 4px;
+      }
+      .word-correct {
+        background-color: rgba(76, 175, 80, 0.1);
+      }
+      .word-error {
+        background-color: rgba(244, 67, 54, 0.1);
+      }
+      .hidden {
+        display: none;
+      }
+      .score-badge {
+        display: inline-block;
+        padding: 2px 6px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: bold;
+        margin-left: 8px;
+        color: white;
+      }
+      .excellent {
+        background-color: #4caf50;
+      }
+      .good {
+        background-color: #8bc34a;
+      }
+      .average {
+        background-color: #ff9800;
+      }
+      .poor {
+        background-color: #f44336;
+      }
+      .word-phonetic {
+        color: #666;
+        font-size: 0.85em;
+        margin-left: 8px;
+      }
+      @keyframes scaleIn {
+        0% {
+          opacity: 0;
+          transform: scale(0.8);
+        }
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+      .word-item {
+        display: flex;
+        align-items: center;
+        animation: scaleIn 0.3s ease-out forwards;
+      }
+      .ws-status {
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        padding: 4px 10px;
+        border-radius: 4px;
+        font-size: 12px;
+        z-index: 100;
+        color: white;
+      }
+      .ws-connected {
+        background-color: #4caf50;
+      }
+      .ws-connecting {
+        background-color: #ff9800;
+      }
+      .ws-error {
+        background-color: #f44336;
+      }
     </style>
-</head>
-<body class="font-inter bg-gray-50 min-h-screen">
-    <div class="container mx-auto px-4 py-8 max-w-4xl">
-        <!-- 状态指示栏 -->
-        <!-- <div class="status-bar">
-            <div class="socket-status">
-                <div id="socketStatus" class="socket-indicator"></div>
-                <span id="socketStatusText" class="socket-text">WebSocket 未连接</span>
-            </div>
-            <div class="audio-meter" id="audioMeter">
-                <div class="audio-level" id="audioLevel"></div>
-            </div>
-        </div> -->
+  </head>
+  <body>
+    <div id="app">
+      <h1>语音评测系统</h1>
 
-        <header class="header">
-            <div class="title">
-                语音评测系统
-                <span class="title-dot"></span>
-                <div class="title-underline"></div>
+      <!-- WebSocket连接状态 -->
+      <div
+        v-if="wsStatus"
+        :class="['ws-status', 
+          wsStatus === '已连接到服务器' ? 'ws-connected' : 
+          wsStatus === '正在连接...' ? 'ws-connecting' : 'ws-error'
+        ]"
+      >
+        {{ wsStatus }}
+      </div>
+
+      <div class="container">
+        <div>
+          <textarea
+            v-model="textToRead"
+            placeholder="请输入需要朗读的英文文本..."
+          ></textarea>
+        </div>
+
+        <div>
+          <label style="display: block; margin-bottom: 10px">
+            <input type="checkbox" v-model="enableMergeFrames" />
+            合并录音帧为完整音频(可播放)
+          </label>
+
+          <button
+            @click="toggleRecording"
+            :class="['recording-button', isRecording ? 'recording' : '']"
+          >
+            {{ isRecording ? '停止录音' : '开始录音' }}
+          </button>
+        </div>
+
+        <div v-if="audioUrl" class="audio-player">
+          <audio controls :src="audioUrl"></audio>
+        </div>
+
+        <div class="status" v-if="status">
+          <p>{{ status }}</p>
+          <div v-if="loading" class="progress-bar">
+            <!-- 进度条 -->
+            <div
+              class="progress"
+              :style="{ width: loadingProgress + '%' }"
+            ></div>
+          </div>
+        </div>
+
+        <div v-if="hasResults" class="result-section">
+          <h3>评测结果</h3>
+
+          <div class="score-overview">
+            <div class="score-card">
+              <h4>总体得分</h4>
+              <div class="score-value">{{ overallScore }}</div>
             </div>
-            <!-- <p class="subtitle">
-                使用腾讯云智聆口语评测技术，实时分析您的发音准确性和流利度
-            </p> -->
-        </header>
-        
-        <main class="main-content">
-            <div class="config-section">
-                <h2 class="section-title">
-                    <i class="fa fa-cog"></i> 评测配置
-                </h2>
-                <div class="config-grid">
-                    <div class="form-group">
-                        <label for="referenceText" class="form-label">
-                            参考文本
-                        </label>
-                        <textarea 
-                            id="referenceText" 
-                            class="form-input form-textarea"
-                            placeholder="输入需要评测的文本..."
-                            rows="4"
-                            required
-                        >beautiful</textarea>
-                        <div class="form-help">请输入要评测的单词或句子</div>
-                    </div>
-                    <!-- <div class="form-group">
-                        <label for="engineType" class="form-label">
-                            引擎类型
-                        </label>
-                        <select 
-                            id="engineType" 
-                            class="form-input"
-                        >
-                            <option value="16k_en">16k英文</option>
-                            <option value="8k_en">8k英文</option>
-                            <option value="16k_cn">16k中文</option>
-                            <option value="8k_cn">8k中文</option>
-                        </select>
-                    </div> -->
-                </div>
+
+            <div class="score-card">
+              <h4>发音准确率</h4>
+              <div class="score-value">{{ pronunciationScore }}%</div>
             </div>
-            
-            <div class="flex flex-col items-center justify-center mb-8">
-                <button 
-                    id="recordButton" 
-                    class="record-button"
-                >
-                    <i class="fa fa-microphone"></i>
-                    <span>开始录音</span>
-                </button>
-                
-                <!-- 播放控件 -->
-                <div id="playControls" class="play-controls">
-                    <div class="time-display">
-                        <span id="currentTime" class="time-text">0:00</span>
-                        <span id="duration" class="time-text">-0:00</span>
-                    </div>
-                    <div class="progress-container" id="progressBarContainer">
-                        <div class="progress-bar" id="playProgressBar"></div>
-                        <div class="progress-hover"></div>
-                    </div>
-                    <div class="control-buttons">
-                        <button 
-                            id="playButton" 
-                            class="control-button play-button"
-                            disabled
-                        >
-                            <i class="fa fa-play"></i>
-                        </button>
-                        <button 
-                            id="downloadButton" 
-                            class="control-button download-button"
-                            disabled
-                        >
-                            <i class="fa fa-download"></i>
-                        </button>
-                    </div>
-                </div>
-                
-                <div id="statusDisplay" class="status-display">
-                    <div id="statusText" class="status-text">
-                        <i class="fa fa-circle-o-notch fa-spin"></i>
-                        <span>准备就绪</span>
-                    </div>
-                    <div class="progress-container">
-                        <div id="progressBar" class="progress-bar"></div>
-                    </div>
-                    
-                    <div id="scoreDisplay" class="score-display">
-                        <div class="score-card">
-                            <div class="score-label">总体得分</div>
-                            <div id="overallScore" class="score-value">-</div>
-                        </div>
-                        <div class="score-card">
-                            <div class="score-label">发音准确度</div>
-                            <div id="accuracyScore" class="score-value">-</div>
-                        </div>
-                        <div class="score-card">
-                            <div class="score-label">流利度</div>
-                            <div id="fluencyScore" class="score-value">-</div>
-                        </div>
-                    </div>
-                </div>
+
+            <div class="score-card">
+              <h4>流利度</h4>
+              <div class="score-value">{{ fluencyScore }}%</div>
             </div>
-            
-            <div id="resultContainer" class="result-container">
-                <h2 class="section-title">
-                    <i class="fa fa-list-alt"></i> 详细结果
-                </h2>
-                
-                <div class="result-section">
-                    <div class="result-title">
-                        <i class="fa fa-comment-o"></i> 单词分析
-                    </div>
-                    <div id="wordsAnalysis" class="words-analysis">
-                        <!-- 结果将在这里动态生成 -->
-                    </div>
-                </div>
-                
-                <div class="result-section">
-                    <div class="result-title">
-                        <i class="fa fa-lightbulb-o"></i> 改进建议
-                    </div>
-                    <div id="suggestions" class="suggestions">
-                        <!-- 建议将在这里动态生成 -->
-                    </div>
-                </div>
+          </div>
+        </div>
+
+        <div v-if="hasResults" class="result-section">
+          <h3>详细分析</h3>
+
+          <div class="word-analysis">
+            <div
+              v-for="(word, index) in wordAnalysis"
+              :key="index"
+              class="word-item"
+              :style="{animationDelay: index * 0.1 + 's'}"
+            >
+              <strong>{{ word.text }}</strong>
+              <span class="word-phonetic" v-if="word.phonetic"
+                >[{{ word.phonetic }}]</span
+              >
+              <span :class="['score-badge', word.scoreClass]"
+                >{{ word.score }}</span
+              >
             </div>
-            
-            <!-- 音频分析区域 -->
-            <div class="audio-visualizer">
-                <h3 class="visualizer-title">
-                    <i class="fa fa-area-chart"></i> 实时音频分析
-                </h3>
-                <canvas id="audioVisualizer" class="visualizer-canvas"></canvas>
-            </div>
-        </main>
-        
-        <footer class="footer">
-            <p>© 2025 语音评测系统 | 使用腾讯云智聆口语评测技术</p>
-        </footer>
+          </div>
+        </div>
+      </div>
+      <div class="recwave" style="width: 100%; height: 100px"></div>
     </div>
-    
+
     <script>
-        // 全局变量管理
-        let audioContext = null;
-        let analyser = null;
-        let mediaStream = null;
-        let socketReconnectTimer = null;
-        const RECONNECT_INTERVAL = 5000; // 5秒重连间隔
-        
-        // 录音播放相关变量
-        let audioBlob = null;
-        let audioUrl = null;
-        let audioElement = null;
-        let isPlaying = false;
-        let audioBuffer = null;
-        let audioSource = null;
+      const { createApp, ref, onMounted, onUnmounted } = Vue;
 
-        document.addEventListener('DOMContentLoaded', async () => {
-            // 获取DOM元素引用
-            const recordButton = document.getElementById('recordButton');
-            // const socketStatus = document.getElementById('socketStatus');
-            // const socketStatusText = document.getElementById('socketStatusText');
-            const audioVisualizer = document.getElementById('audioVisualizer');
-            const audioLevel = document.getElementById('audioLevel');
-            const statusText = document.getElementById('statusText');
-            const progressBar = document.getElementById('progressBar');
-            const resultContainer = document.getElementById('resultContainer');
-            const referenceText = document.getElementById('referenceText');
-            // const engineType = document.getElementById('engineType');
-            const overallScore = document.getElementById('overallScore');
-            const accuracyScore = document.getElementById('accuracyScore');
-            const fluencyScore = document.getElementById('fluencyScore');
-            const wordsAnalysis = document.getElementById('wordsAnalysis');
-            const suggestions = document.getElementById('suggestions');
-            
-            // 新增：获取播放控件引用
-            const playControls = document.getElementById('playControls');
-            const playButton = document.getElementById('playButton');
-            const downloadButton = document.getElementById('downloadButton');
-            const progressBarContainer = document.getElementById('progressBarContainer');
-            const playProgressBar = document.getElementById('playProgressBar');
-            const currentTime = document.getElementById('currentTime');
-            const duration = document.getElementById('duration');
-            
-            // 初始化WebSocket管理器
-            const socketManager = {
-                socket: null,
-                connect() {
-                    if (this.socket && this.socket.readyState === WebSocket.OPEN) return;
-                    
-                    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                    this.socket = new WebSocket(`${protocol}//${window.location.host}/ws/assessment`);
+      createApp({
+        setup() {
+          const textToRead = ref("hello");
+          const isRecording = ref(false);
+          const audioUrl = ref("");
+          const status = ref("");
+          const loading = ref(false);
+          const loadingProgress = ref(0);
+          const hasResults = ref(false);
 
-                    const self = this; // 保存对this的引用
+          const inited = ref(false);
 
-                    this.socket.onopen = () => {
-                        // socketStatus.style.backgroundColor = 'var(--socket-connected)';
-                        // socketStatusText.textContent = 'WebSocket 已连接';
-                        self.sendConfig();
-                        self.autoReconnectClear();
-                    };
+          // 是否合并所有帧为完整录音
+          const enableMergeFrames = ref(true);
 
-                    this.socket.onmessage = (event) => {
-                        try {
-                            const data = JSON.parse(event.data);
-                            processServerMessage(data);
-                        } catch (error) {
-                            console.error('解析服务器消息失败:', error);
-                        }
-                    };
+          // 评测结果
+          const overallScore = ref(0);
+          const pronunciationScore = ref(0);
+          const fluencyScore = ref(0);
+          const wordAnalysis = ref([]);
 
-                    this.socket.onclose = (event) => {
-                        // socketStatus.style.backgroundColor = 'var(--socket-disconnected)';
-                        // socketStatusText.textContent = `WebSocket 断开 (${event.code})`;
-                    };
+          // 添加WebSocket相关状态
+          const wsStatus = ref("");
+          let socket = null;
+          let reconnectTimeout = null;
+          let reconnectAttempts = 0;
+          const maxReconnectAttempts = 5;
+          const reconnectInterval = 3000; // 重连间隔，单位毫秒
 
-                    this.socket.onerror = (error) => {
-                        console.error('WebSocket 错误:', error);
-                        if (self.socket) {
-                            self.socket.close();
-                        }
-                    };
-                },
+          // 实时传输相关配置
+          const testSampleRate = 16000;
+          const testBitRate = 16; // 本例子只支持16位pcm
 
-                sendConfig() {
-                    const config = {
-                        ref_text: referenceText.value.trim(),
-                        server_engine_type: '16k_en' // 默认16k英文
-                    };
-                    if (config.ref_text && this.socket) {
-                        this.socket.send(JSON.stringify(config));
-                    }
-                },
+          // 每次发送指定二进制数据长度的数据帧，单位字节，16位pcm取值必须为2的整数倍
+          // 16位16khz的pcm 1秒有：16000hz*16位/8比特=32000字节的数据，配置3200字节每秒发送大约10次
+          const SendFrameSize = 3200;
 
-                sendAudioData(data) {
-                    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-                        // 确保音频数据长度为偶数
-                        if (data instanceof ArrayBuffer && data.byteLength % 2 !== 0) {
-                            const view = new Uint8Array(data);
-                            const newData = new Uint8Array(data.byteLength + 1);
-                            newData.set(view);
-                            newData[data.byteLength] = 0; // 补零
-                            data = newData.buffer;
-                            console.log(`补全音频数据: ${data.byteLength}`);
-                        }
-                        this.socket.send(data);
-                    }
-                },
-                
-                autoReconnectClear() {
-                    if (socketReconnectTimer) {
-                        clearTimeout(socketReconnectTimer);
-                    }
-                },
+          // 实时传输相关变量
+          let send_pcmBuffer;
+          let send_pcmSampleRate;
+          let send_chunk;
+          let send_lastFrame;
+          let send_logNumber;
 
-                close() {
-                    if (this.socket) {
-                        this.socket.close();
-                    }
-                    this.autoReconnectClear();
+          // 存储所有帧用于合并
+          let testFrames = [];
+
+          // 重置环境，每次开始录音时必须先调用此方法，清理环境
+          function realTimeSendReset() {
+            send_pcmBuffer = new Int16Array(0);
+            send_pcmSampleRate = testSampleRate;
+            send_chunk = null;
+            send_lastFrame = null;
+            send_logNumber = 0;
+
+            // 清空帧存储
+            testFrames = [];
+          }
+
+          // 实时处理核心函数
+          function realTimeSendTry(buffers, bufferSampleRate, isClose) {
+            // 提取出新的pcm数据
+            let pcm = new Int16Array(0);
+            if (buffers.length > 0) {
+              // 借用SampleData函数进行数据的连续处理，采样率转换是顺带的，得到新的pcm数据
+              const chunk = Recorder.SampleData(
+                buffers,
+                bufferSampleRate,
+                testSampleRate,
+                send_chunk
+              );
+              send_chunk = chunk;
+
+              pcm = chunk.data; // 此时的pcm就是原始的音频16位pcm数据
+              send_pcmSampleRate = chunk.sampleRate; // 实际转换后的采样率
+            }
+
+            // 没有指定固定的帧大小，直接把pcm发送出去即可
+            if (!SendFrameSize) {
+              transferUpload(pcm, isClose);
+              return;
+            }
+
+            // 先将新的pcm写入缓冲，再按固定大小切分后发送
+            let pcmBuffer = send_pcmBuffer;
+            const tmp = new Int16Array(pcmBuffer.length + pcm.length);
+            tmp.set(pcmBuffer, 0);
+            tmp.set(pcm, pcmBuffer.length);
+            pcmBuffer = tmp;
+
+            // 循环切分出固定长度的数据帧
+            const chunkSize = SendFrameSize / (testBitRate / 8);
+            while (true) {
+              // 切分出固定长度的一帧数据
+              if (pcmBuffer.length >= chunkSize) {
+                const frame = new Int16Array(pcmBuffer.subarray(0, chunkSize));
+                pcmBuffer = new Int16Array(pcmBuffer.subarray(chunkSize));
+
+                let closeVal = false;
+                if (isClose && pcmBuffer.length == 0) {
+                  closeVal = true; // 已关闭录音，且没有剩余要发送的数据了
                 }
-            };
-
-            // 录音管理器
-            const recordingManager = {
-                isRecording: false,
-                mediaRecorder: null,
-                audioInput: null,
-                mimeType: null,
-                audioChunks: [],
-                
-                async start() {
-                    // 重置结果区域
-                    this.resetResultDisplay();
-                    
-                    // 显示loading状态
-                    recordButton.disabled = true;
-                    recordButton.innerHTML = '<i class="fa fa-spinner fa-spin"></i><span>准备中...</span>';
-                    statusText.innerHTML = '<i class="fa fa-spinner fa-spin"></i><span>初始化录音...</span>';
-                    statusDisplay.classList.remove('hidden');
-                    statusDisplay.classList.add('visible');
-                    progressBar.style.width = '25%';
-                    progressBar.classList.add('pulse');
-                    
-                    if (!await this.checkPermissions()) {
-                        this.resetLoadingState();
-                        return;
-                    }
-                    if (!this.initAudioContext()) {
-                        this.resetLoadingState();
-                        return;
-                    }
-                    if (!await this.requestMicrophonePermission()) {
-                        this.resetLoadingState();
-                        return;
-                    }
-                    
-                    // 录音开始，结束loading状态
-                    this.isRecording = true;
-                    recordButton.disabled = false;
-                    recordButton.classList.remove('record-button');
-                    recordButton.classList.add('record-button', 'recording');
-                    recordButton.innerHTML = '<i class="fa fa-stop"></i><span>停止录音</span>';
-                    statusText.innerHTML = '<i class="fa fa-microphone"></i><span>正在录音...</span>';
-                    progressBar.style.width = '50%';
-                    
-                    // 重置录音数据
-                    this.audioChunks = [];
-                    
-                    // 隐藏播放控件
-                    playControls.classList.remove('visible');
-                    
-                    // 启动音频可视化
-                    this.startVisualization();
-                },
-                
-                // 重置loading状态
-                resetLoadingState() {
-                    recordButton.disabled = false;
-                    recordButton.innerHTML = '<i class="fa fa-microphone"></i><span>开始录音</span>';
-                    statusText.innerHTML = '<i class="fa fa-info-circle"></i><span>录音已取消</span>';
-                    progressBar.style.width = '0%';
-                    progressBar.classList.remove('pulse');
-                },
-                
-                async checkPermissions() {
-                    try {
-                        // 检测是否为iPhone设备
-                        const isIPhone = /iPhone/.test(navigator.platform) || 
-                                        (navigator.userAgent.includes('Mac') && 'ontouchend' in document);
-                        
-                        // 检测是否为Safari浏览器
-                        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-                        
-                        // iPhone上的Safari特殊处理
-                        if (isIPhone && isSafari) {
-                            try {
-                                // iPhone上必须在用户交互（如点击）后调用
-                                // 这里假设已经在点击事件处理函数中
-                                
-                                // 尝试访问媒体设备
-                                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                                
-                                // 成功获取流后释放
-                                stream.getTracks().forEach(track => track.stop());
-                                
-                                // 保存权限状态（可选）
-                                localStorage.setItem('microphonePermission', 'granted');
-                                
-                                return true;
-                            } catch (err) {
-
-                                alert(err);
-                                console.error('iPhone麦克风权限被拒绝:', err);
-                                
-                                // 显示自定义提示，引导用户到设置页面
-                                const isPermissionDenied = err.name === 'NotAllowedError';
-                                if (isPermissionDenied) {
-                                    alert('请在设置 > Safari > 网站设置 > 麦克风 中允许本网站访问麦克风');
-                                } else {
-                                    alert('无法访问麦克风，请确保您的设备有麦克风并且未被禁用');
-                                }
-                                
-                                // 保存权限状态（可选）
-                                localStorage.setItem('microphonePermission', 'denied');
-                                return false;
-                            }
-                        }
-                        
-                        // 苹果电脑(Mac)上的Safari处理
-                        const isMacSafari = /Mac/.test(navigator.platform) && isSafari;
-                        if (isMacSafari) {
-                            try {
-                                // 尝试使用标准权限API
-                                const permission = await navigator.permissions.query({ name: 'microphone' });
-                                
-                                // 如果权限已授予或提示
-                                if (permission.state === 'granted' || permission.state === 'prompt') {
-                                    return true;
-                                }
-                                
-                                // 如果权限被拒绝
-                                if (permission.state === 'denied') {
-                                    alert('请在Safari设置中允许麦克风访问权限');
-                                    return false;
-                                }
-                            } catch (error) {
-                                // 标准API失败时，回退到getUserMedia
-                                console.log('标准权限API失败，回退到getUserMedia方法');
-                                try {
-                                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                                    stream.getTracks().forEach(track => track.stop());
-                                    return true;
-                                } catch (err) {
-                                    console.error('Mac上的Safari麦克风权限被拒绝:', err);
-                                    alert('请在Safari设置中允许麦克风访问权限');
-                                    return false;
-                                }
-                            }
-                        }
-                        
-                        // 非苹果设备使用标准权限API
-                        const permission = await navigator.permissions.query({ name: 'microphone' });
-                        if (permission.state === 'denied') {
-                            alert('请在浏览器设置中允许麦克风访问权限');
-                            return false;
-                        }
-                        return true;
-                    } catch (error) {
-                        console.error('检查麦克风权限失败:', error);
-                        // 无法检查权限，继续尝试
-                        return true;
-                    }
-                },
-
-                resetRecordingState() {
-                    recordButton.disabled = false;
-                    recordButton.innerHTML = '<i class="fa fa-microphone"></i><span>开始录音</span>';
-                    statusText.innerHTML = '<i class="fa fa-info-circle"></i><span>录音已取消</span>';
-                    progressBar.style.width = '0%';
-                    progressBar.classList.remove('pulse');
-                    resultContainer.style.display = 'none';
-                },
-
-                stop() {
-                    // 确保按钮不可点击，避免重复点击
-                    recordButton.disabled = true;
-                    
-                    this.isRecording = false;
-                    recordButton.classList.remove('record-button', 'recording');
-                    recordButton.classList.add('record-button');
-                    recordButton.innerHTML = '<i class="fa fa-spinner fa-spin"></i><span>处理中...</span>';
-                    statusText.innerHTML = '<i class="fa fa-cog fa-spin"></i><span>录音已停止，正在处理...</span>';
-                    progressBar.style.width = '75%';
-                    progressBar.classList.remove('pulse');
-                    
-                    // 停止音频可视化
-                    this.stopVisualization();
-                    
-                    // 结束录音并发送终止信号
-                    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
-                        try {
-                            // 先发送结束标志
-                            socketManager.sendAudioData(JSON.stringify({type: "end"}));
-                            
-                            // 然后停止录音
-                            this.mediaRecorder.stop();
-                            
-                            // 录音处理完成后恢复按钮状态
-                            setTimeout(() => {
-                                recordButton.disabled = false;
-                                recordButton.innerHTML = '<i class="fa fa-microphone"></i><span>开始录音</span>';
-                                
-                                // 如果8秒后还没有收到处理完成的消息，恢复到初始状态
-                                setTimeout(() => {
-                                    if (statusText.textContent.includes('录音已停止，正在处理')) {
-                                        statusText.innerHTML = '<i class="fa fa-info-circle"></i><span>处理超时，但录音可能已完成</span>';
-                                        progressBar.style.width = '0%';
-                                        // 不隐藏结果区域，因为可能已经有结果
-                                    }
-                                }, 8000);
-                            }, 1000);
-                        } catch (error) {
-                            console.error('停止录音失败:', error);
-                            this.resetRecordingState();
-                        }
-                    } else {
-                        // 如果没有录音进行，直接恢复按钮状态
-                        this.resetRecordingState();
-                    }
-                },
-                
-                initAudioContext() {
-                    try {
-                        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                        analyser = audioContext.createAnalyser();
-                        analyser.fftSize = 2048;
-                        return true;
-                    } catch (error) {
-                        console.error('初始化 AudioContext 失败:', error);
-                        statusText.innerHTML = '<i class="fa fa-exclamation-triangle"></i><span>浏览器不支持音频处理功能</span>';
-                        statusText.classList.add('error');
-                        return false;
-                    }
-                },
-
-                requestMicrophonePermission() {
-                    // 检测支持的MIME类型
-                    this.mimeType = this.getSupportedMimeType();
-                    if (!this.mimeType) {
-                        statusText.innerHTML = '<i class="fa fa-exclamation-triangle"></i><span>浏览器不支持任何可用的音频格式</span>';
-                        statusText.classList.add('error');
-                        this.resetLoadingState();
-                        return false;
-                    }
-                    
-                    return navigator.mediaDevices.getUserMedia({ audio: true })
-                        .then(stream => {
-                            mediaStream = stream;
-                            this.audioInput = audioContext.createMediaStreamSource(stream);
-                            this.audioInput.connect(analyser);
-                            
-                            // 创建 MediaRecorder
-                            try {
-                                this.mediaRecorder = new MediaRecorder(stream, {
-                                    mimeType: this.mimeType,
-                                    audioBitsPerSecond: 128000
-                                });
-                            } catch (error) {
-                                console.error('创建 MediaRecorder 失败:', error);
-                                statusText.innerHTML = '<i class="fa fa-exclamation-triangle"></i><span>无法初始化录音功能</span>';
-                                statusText.classList.add('error');
-                                this.resetLoadingState();
-                                this.cleanup();
-                                return false;
-                            }
-                            
-                            // 收集录音数据
-                            this.mediaRecorder.ondataavailable = (event) => {
-                                if (event.data.size > 0) {
-                                    this.audioChunks.push(event.data);
-                                    
-                                    // 转换为ArrayBuffer并发送
-                                    event.data.arrayBuffer().then(arrayBuffer => {
-                                        socketManager.sendAudioData(arrayBuffer);
-                                        
-                                        // 更新音频电平
-                                        const audioLevelValue = this.getAudioLevel();
-                                        if (audioLevel) {
-                                            audioLevel.style.width = `${audioLevelValue}%`;
-                                        }
-                                    });
-                                }
-                            };
-                            
-                            this.mediaRecorder.onstop = () => {
-                                console.log('MediaRecorder 已停止');
-                                console.log('录音块数量:', this.audioChunks.length);
-                                
-                                // 检查是否有录音数据
-                                if (this.audioChunks.length === 0) {
-                                    console.warn('没有录音数据');
-                                    statusText.innerHTML = '<i class="fa fa-info-circle"></i><span>没有检测到录音数据，请重试</span>';
-                                    progressBar.style.width = '0%';
-                                    progressBar.classList.remove('pulse');
-                                    recordButton.disabled = false;
-                                    recordButton.innerHTML = '<i class="fa fa-microphone"></i><span>开始录音</span>';
-                                    resultContainer.style.display = 'none';
-                                } else {
-                                    // 处理录音完成，即使时间很短也处理
-                                    this.processRecording();
-                                }
-                                
-                                if (stream) {
-                                    stream.getTracks().forEach(track => track.stop());
-                                }
-                                this.cleanup();
-                            };
-                            
-                            this.mediaRecorder.onerror = (error) => {
-                                console.error('MediaRecorder 错误:', error);
-                                statusText.innerHTML = `<i class="fa fa-exclamation-triangle"></i><span>录音错误: ${error.message}</span>`;
-                                statusText.classList.add('error');
-                                this.resetRecordingState();
-                                this.cleanup();
-                            };
-                            
-                            this.mediaRecorder.start(100); // 100ms 数据块间隔
-                            return true;
-                        })
-                        .catch(error => {
-                            console.error('麦克风权限获取失败:', error);
-                            statusText.innerHTML = '<i class="fa fa-exclamation-triangle"></i><span>请允许访问麦克风</span>';
-                            statusText.classList.add('error');
-                            this.resetLoadingState();
-                            this.cleanup();
-                            return false;
-                        });
-                },
-
-                // 获取支持的MIME类型
-                getSupportedMimeType() {
-                    // 检测是否为苹果设备
-                    const isAppleDevice = /Mac|iPhone|iPod|iPad/.test(navigator.platform);
-                    // 检测是否为Safari或WebKit浏览器
-                    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-                    const isWebKit = /WebKit/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
-
-                    // 针对苹果PC和iPhone的特殊处理
-                    if (isAppleDevice && (isSafari || isWebKit)) {
-                        // 优先检测苹果设备更支持的MIME类型
-                        const appleTypes = [
-                            'audio/mp4',
-                            'audio/mpeg',
-                            'audio/x - m4a'
-                        ];
-
-                        for (const type of appleTypes) {
-                            if (MediaRecorder.isTypeSupported(type)) {
-                                console.log(`苹果设备支持的MIME类型: ${type}`);
-                                return type;
-                            }
-                        }
-                    }
-
-                    // 通用类型检测
-                    const commonTypes = [
-                        'audio/webm;codecs=opus',
-                        'audio/webm',
-                        'audio/ogg;codecs=opus',
-                        'audio/wav'
-                    ];
-
-                    for (const type of commonTypes) {
-                        if (MediaRecorder.isTypeSupported(type)) {
-                            console.log(`支持的MIME类型: ${type}`);
-                            return type;
-                        }
-                    }
-
-                    console.error('没有找到支持的MIME类型');
-                    return null;
-                },
-
-                startVisualization() {
-                    const canvasCtx = audioVisualizer.getContext('2d');
-                    const bufferLength = analyser.frequencyBinCount;
-                    const dataArray = new Uint8Array(bufferLength);
-                    
-                    // 设置Canvas尺寸
-                    const resizeCanvas = () => {
-                        audioVisualizer.width = audioVisualizer.offsetWidth;
-                        audioVisualizer.height = audioVisualizer.offsetHeight;
-                    };
-                    
-                    resizeCanvas();
-                    window.addEventListener('resize', resizeCanvas);
-                    
-                    // 绘制背景
-                    const drawBackground = () => {
-                        canvasCtx.fillStyle = 'rgb(230, 230, 230)';
-                        canvasCtx.fillRect(0, 0, audioVisualizer.width, audioVisualizer.height);
-                    };
-                    
-                    // 绘制频谱图
-                    function visualize() {
-                        drawBackground();
-                        
-                        analyser.getByteFrequencyData(dataArray);
-                        
-                        const barWidth = (audioVisualizer.width / bufferLength) * 2.5;
-                        let x = 0;
-                        
-                        for (let i = 0; i < bufferLength; i++) {
-                            const barHeight = (dataArray[i] / 255) * audioVisualizer.height;
-                            
-                            // 渐变颜色
-                            const hue = (i / bufferLength) * 240;
-                            canvasCtx.fillStyle = `hsl(${hue}, 100%, 50%)`;
-                            
-                            canvasCtx.fillRect(x, audioVisualizer.height - barHeight, barWidth, barHeight);
-                            
-                            x += barWidth + 1;
-                        }
-                        
-                        requestAnimationFrame(visualize);
-                    }
-                    
-                    visualize();
-                },
-
-                stopVisualization() {
-                    if (audioContext) {
-                        audioContext.suspend();
-                    }
-                },
-
-                getAudioLevel() {
-                    const dataArray = new Uint8Array(analyser.frequencyBinCount);
-                    analyser.getByteTimeDomainData(dataArray);
-                    
-                    let sum = 0;
-                    dataArray.forEach(value => {
-                        sum += Math.pow(value - 128, 2);
-                    });
-                    
-                    const rms = Math.sqrt(sum / dataArray.length);
-                    return Math.min(rms * 2, 100); // 限制在0-100%
-                },
-
-                resetResultDisplay() {
-                    resultContainer.style.display = 'none';
-                    overallScore.textContent = '-';
-                    accuracyScore.textContent = '-';
-                    fluencyScore.textContent = '-';
-                    wordsAnalysis.innerHTML = '';
-                    suggestions.innerHTML = '';
-                },
-
-                cleanup() {
-                    console.log('清理录音资源');
-                    this.mediaRecorder = null;
-                    if (this.audioInput) {
-                        this.audioInput.disconnect();
-                    }
-                    if (mediaStream) {
-                        mediaStream.getTracks().forEach(track => track.stop());
-                    }
-                    if (audioContext) {
-                        audioContext.close();
-                        audioContext = null;
-                    }
-                },
-                
-                processRecording() {
-                    if (this.audioChunks.length === 0) {
-                        console.warn('没有录音数据');
-                        statusText.innerHTML = '<i class="fa fa-exclamation-triangle"></i><span>没有检测到录音数据</span>';
-                        statusText.classList.add('error');
-                        if (progressBar) {
-                            progressBar.style.width = '0%';
-                        }
-                        return;
-                    }
-                    
-                    console.log('处理录音数据，块数量:', this.audioChunks.length);
-                    
-                    // 创建音频Blob
-                    audioBlob = new Blob(this.audioChunks, { type: this.mimeType });
-                    console.log('录音数据大小:', audioBlob.size, 'bytes');
-                    
-                    // 创建音频URL
-                    audioUrl = URL.createObjectURL(audioBlob);
-                    
-                    // 初始化音频元素
-                    this.initAudioElement();
-                    
-                    // 显示播放控件
-                    this.showPlayControls();
-                    
-                    // 确保结果区域最终会显示（即使结果尚未返回或仅包含短音频）
-                    if (audioBlob.size > 0) {
-                        console.log('有效的录音数据，可以进行评测');
-                        // 如果5秒后仍无评测结果，显示结果区域
-                        setTimeout(() => {
-                            if (resultContainer.style.display === 'none') {
-                                console.log('评测未返回结果，但显示结果区域');
-                                statusText.innerHTML = '<i class="fa fa-check"></i><span>录音已完成</span>';
-                                resultContainer.style.display = 'block';
-                            }
-                        }, 5000);
-                    }
-                },
-                
-                initAudioElement() {
-                    // 如果已有音频元素，先释放资源
-                    if (audioElement) {
-                        audioElement.pause();
-                        audioElement = null;
-                    }
-                    
-                    // 创建新的音频元素
-                    audioElement = new Audio(audioUrl);
-                    
-                    // 设置音频元数据加载完成时的回调
-                    audioElement.onloadedmetadata = () => {
-                        // 更新音频时长显示
-                        const durationText = formatTime(audioElement.duration);
-                        if (duration) {
-                            duration.textContent = `-${durationText}`;
-                        }
-                    };
-                    
-                    // 设置播放位置更新时的回调
-                    audioElement.ontimeupdate = () => {
-                        this.updatePlayProgress();
-                    };
-                    
-                    // 设置播放结束时的回调
-                    audioElement.onended = () => {
-                        this.onPlayEnd();
-                    };
-                    
-                    // 设置播放错误时的回调
-                    audioElement.onerror = () => {
-                        console.error('音频播放错误:', audioElement.error);
-                        statusText.innerHTML = '<i class="fa fa-exclamation-triangle"></i><span>音频播放错误</span>';
-                        statusText.classList.add('error');
-                        this.onPlayEnd();
-                    };
-                },
-                
-                showPlayControls() {
-                    if (playControls) {
-                        playControls.classList.add('visible');
-                    }
-                    if (playButton) {
-                        playButton.disabled = false;
-                    }
-                    if (downloadButton) {
-                        downloadButton.disabled = false;
-                    }
-                },
-                
-                updatePlayProgress() {
-                    if (!audioElement) return;
-                    
-                    const percent = (audioElement.currentTime / audioElement.duration) * 100;
-                    if (playProgressBar) {
-                        playProgressBar.style.width = `${percent}%`;
-                    }
-                    
-                    // 更新当前时间显示
-                    const currentTimeText = formatTime(audioElement.currentTime);
-                    if (currentTime) {
-                        currentTime.textContent = currentTimeText;
-                    }
-                },
-                
-                onPlayEnd() {
-                    isPlaying = false;
-                    if (playButton) {
-                        playButton.innerHTML = '<i class="fa fa-play"></i>';
-                    }
-                    if (playProgressBar) {
-                        playProgressBar.style.width = '0%';
-                    }
-                    if (currentTime) {
-                        currentTime.textContent = '0:00';
-                    }
-                }
-            };
-            
-            // 格式化时间为 MM:SS 格式
-            function formatTime(seconds) {
-                if (isNaN(seconds)) return '0:00';
-                
-                const minutes = Math.floor(seconds / 60);
-                const remainingSeconds = Math.floor(seconds % 60);
-                
-                return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+                transferUpload(frame, closeVal);
+                if (!closeVal) continue; // 循环切分剩余数据
+              } else if (isClose) {
+                // 已关闭录音，但此时结尾剩余的数据不够一帧长度，结尾补0凑够一帧
+                const frame = new Int16Array(chunkSize);
+                frame.set(pcmBuffer);
+                pcmBuffer = new Int16Array(0);
+                transferUpload(frame, true);
+              }
+              break;
             }
-            
-            // 播放/暂停录音
-            function togglePlay() {
-                if (!audioElement) return;
-                
-                if (isPlaying) {
-                    // 暂停播放
-                    audioElement.pause();
-                    if (playButton) {
-                        playButton.innerHTML = '<i class="fa fa-play"></i>';
-                    }
-                } else {
-                    // 开始播放
-                    audioElement.play().then(() => {
-                        if (playButton) {
-                            playButton.innerHTML = '<i class="fa fa-pause"></i>';
-                        }
-                    }).catch(error => {
-                        console.error('播放失败:', error);
-                        statusText.innerHTML = `<i class="fa fa-exclamation-triangle"></i><span>播放失败: ${error.message}</span>`;
-                        statusText.classList.add('error');
-                    });
-                }
-                
-                isPlaying = !isPlaying;
+            // 剩余数据存回去，留给下次发送
+            send_pcmBuffer = pcmBuffer;
+          }
+
+          // 数据传输函数
+          function transferUpload(pcmFrame, isClose) {
+            if (isClose && pcmFrame.length == 0) {
+              // 最后一帧数据，生成一帧静默的pcm（全0）
+              const len = send_lastFrame
+                ? send_lastFrame.length
+                : Math.round((send_pcmSampleRate / 1000) * 50);
+              pcmFrame = new Int16Array(len);
             }
-            
-            // 下载录音
-            function downloadAudio() {
-                if (!audioBlob) return;
-                
-                const url = URL.createObjectURL(audioBlob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `recording_${new Date().toISOString().replace(/[:.]/g, '-')}.${audioBlob.type.split('/')[1] || 'webm'}`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            }
-            
-            // 跳转到播放位置
-            function seekToPosition(event) {
-                if (!audioElement) return;
-                
-                const rect = progressBarContainer.getBoundingClientRect();
-                const x = event.clientX - rect.left;
-                const percent = x / rect.width;
-                const seekTime = percent * audioElement.duration;
-                
-                audioElement.currentTime = seekTime;
+            send_lastFrame = pcmFrame;
+
+            // 如果启用了合并，存储当前帧
+            if (enableMergeFrames.value) {
+              testFrames.push(new Int16Array(pcmFrame));
             }
 
-            // 处理服务器消息
-            function processServerMessage(data) {
-                console.log('收到服务器消息:', data);
-                
-                switch (data.status) {
-                    case 'start':
-                        statusText.innerHTML = '<i class="fa fa-cog fa-spin"></i><span>开始评测...</span>';
-                        break;
-                        
-                    case 'intermediate':
-                        // 更新中间结果
-                        updateResults(data.result);
-                        statusText.innerHTML = '<i class="fa fa-cog fa-spin"></i><span>正在分析...</span>';
-                        break;
-                        
-                    case 'complete':
-                        // 更新最终结果
-                        updateResults(data.result);
-                        statusText.innerHTML = '<i class="fa fa-check"></i><span>评测完成</span>';
-                        progressBar.style.width = '100%';
-                        progressBar.classList.remove('pulse');
-                        progressBar.classList.add('bg-secondary');
-                        
-                        // 确保按钮可用状态
-                        recordButton.disabled = false;
-                        recordButton.innerHTML = '<i class="fa fa-microphone"></i><span>开始录音</span>';
-                        
-                        // 显示结果区域
-                        setTimeout(() => {
-                            resultContainer.style.display = 'block';
-                        }, 500);
-                        break;
-                        
-                    case 'error':
-                        console.error('评测错误:', data.error);
-                        statusText.innerHTML = `<i class="fa fa-exclamation-triangle"></i><span>错误: ${data.error}</span>`;
-                        statusText.classList.add('error');
-                        progressBar.style.width = '0%';
-                        progressBar.classList.remove('pulse');
-                        resultContainer.style.display = 'none';
-                        
-                        // 确保按钮可用状态
-                        recordButton.disabled = false;
-                        recordButton.innerHTML = '<i class="fa fa-microphone"></i><span>开始录音</span>';
-                        
-                        recordingManager.cleanup();
-                        break;
-                }
+            // 发送方式：直接ArrayBuffer二进制发送
+            if (socket && socket.readyState === WebSocket.OPEN) {
+              socket.send(pcmFrame.buffer);
+              console.log(`发送音频帧，大小: ${pcmFrame.length}个采样点`);
             }
-            
-            // 更新评测结果
-            function updateResults(result) {
-                if (!result) return;
-                
-                // 安全更新分数
-                const updateScore = (element, value) => {
-                    if (value !== undefined && !isNaN(value) && isFinite(value)) {
-                        element.textContent = value.toFixed(1);
-                    } else {
-                        element.textContent = '-';
-                    }
+
+            // 最后一次调用发送，此时的pcmFrame可以认为是最后一帧
+            if (isClose) {
+              console.log(`已停止传输`);
+
+              // 如果启用了合并，生成完整音频文件
+              if (enableMergeFrames.value) {
+                mergeFramesAndCreateAudio();
+              }
+
+              // 发送结束标记
+              if (socket && socket.readyState === WebSocket.OPEN) {
+                const endMessage = {
+                  type: "end",
+                  timestamp: Date.now(),
                 };
-                
-                // 更新分数
-                updateScore(overallScore, result.overall_score);
-                updateScore(accuracyScore, result.pron_accuracy);
-                updateScore(fluencyScore, result.pron_fluency);
-                
-                // 更新单词分析
-                if (result.words && result.words.length > 0) {
-                    updateWordAnalysis(result.words);
-                }
-                
-                // 生成建议
-                generateSuggestions(result);
+                socket.send(JSON.stringify(endMessage));
+              }
             }
-            
-            // 更新单词分析结果
-            function updateWordAnalysis(words) {
-                wordsAnalysis.innerHTML = '';
-                
-                words.forEach((word, index) => {
-                    const wordElement = document.createElement('div');
-                    wordElement.className = 'word-item';
-                    wordElement.style.animation = `scaleIn 0.3s ease-out forwards ${index * 0.1}s`;
-                    wordElement.style.opacity = '0';
-                    
-                    // 单词文本
-                    const wordText = document.createElement('span');
-                    wordText.className = 'word-text';
-                    wordText.textContent = word.W;
-                    
-                    // 音标
-                    const phonetic = document.createElement('span');
-                    phonetic.className = 'word-phonetic';
-                    phonetic.textContent = word.P;
-                    
-                    // 得分
-                    const score = document.createElement('span');
-                    const scoreValue = parseFloat(word.S);
-                    score.className = `score-badge ${getScoreClass(scoreValue)}`;
-                    score.textContent = scoreValue.toFixed(1);
-                    
-                    wordElement.appendChild(wordText);
-                    wordElement.appendChild(phonetic);
-                    wordElement.appendChild(score);
-                    
-                    wordsAnalysis.appendChild(wordElement);
-                });
-            }
-            
-            // 根据分数获取类名
-            function getScoreClass(score) {
-                if (score >= 85) return 'good';
-                if (score >= 60) return 'warning';
-                return 'bad';
+          }
+
+          // 合并所有帧并创建音频
+          function mergeFramesAndCreateAudio() {
+            if (testFrames.length === 0) {
+              console.log("未录制到任何音频数据");
+              return;
             }
 
-            // 生成建议
-            function generateSuggestions(result) {
-                suggestions.innerHTML = '';
-                
-                if (!result.words || result.words.length === 0) return;
-                
-                // 查找发音较差的单词
-                const lowScoreWords = result.words.filter(word => parseFloat(word.S) < 70);
-                
-                if (lowScoreWords.length > 0) {
-                    const suggestion = document.createElement('p');
-                    suggestion.innerHTML = `<i class="fa fa-arrow-right mr-1 text-primary"></i> 建议重点练习发音: ${lowScoreWords.map(word => `<span class="font-medium">${word.W}</span>`).join(', ')}`;
-                    suggestions.appendChild(suggestion);
-                }
-                
-                // 根据流利度给出建议
-                if (result.pron_fluency !== undefined && !isNaN(result.pron_fluency)) {
-                    const fluencySuggestion = document.createElement('p');
-                    
-                    if (result.pron_fluency < 60) {
-                        fluencySuggestion.innerHTML = `<i class="fa fa-arrow-right mr-1 text-primary"></i> 您的流利度有待提高，建议多进行朗读练习，注意语速和停顿。`;
-                    } else if (result.pron_fluency < 80) {
-                        fluencySuggestion.innerHTML = `<i class="fa fa-arrow-right mr-1 text-primary"></i> 您的流利度良好，但仍有提升空间，建议增加口语练习频率。`;
-                    } else {
-                        fluencySuggestion.innerHTML = `<i class="fa fa-arrow-right mr-1 text-primary"></i> 您的口语流利度非常出色，继续保持！`;
-                    }
-                    
-                    suggestions.appendChild(fluencySuggestion);
-                }
-                
-                // 根据准确度给出建议
-                if (result.pron_accuracy !== undefined && !isNaN(result.pron_accuracy)) {
-                    const accuracySuggestion = document.createElement('p');
-                    
-                    if (result.pron_accuracy < 60) {
-                        accuracySuggestion.innerHTML = `<i class="fa fa-arrow-right mr-1 text-primary"></i> 您的发音准确度需要提高，建议多听标准发音并模仿练习。`;
-                    } else if (result.pron_accuracy < 80) {
-                        accuracySuggestion.innerHTML = `<i class="fa fa-arrow-right mr-1 text-primary"></i> 您的发音准确度良好，但某些单词需要更准确的发音，建议对照音标练习。`;
-                    } else {
-                        accuracySuggestion.innerHTML = `<i class="fa fa-arrow-right mr-1 text-primary"></i> 您的发音准确度非常出色，继续保持！`;
-                    }
-                    
-                    suggestions.appendChild(accuracySuggestion);
-                }
-                
-                // 根据完整度给出建议
-                if (result.completeness !== undefined && !isNaN(result.completeness)) {
-                    const completenessSuggestion = document.createElement('p');
-                    
-                    if (result.completeness < 60) {
-                        completenessSuggestion.innerHTML = `<i class="fa fa-arrow-right mr-1 text-primary"></i> 您的发音完整度有待提高，建议注意单词的每个音节发音。`;
-                    } else if (result.completeness < 80) {
-                        completenessSuggestion.innerHTML = `<i class="fa fa-arrow-right mr-1 text-primary"></i> 您的发音完整度良好，继续保持。`;
-                    } else {
-                        completenessSuggestion.innerHTML = `<i class="fa fa-arrow-right mr-1 text-primary"></i> 您的发音完整度非常出色！`;
-                    }
-                    
-                    suggestions.appendChild(completenessSuggestion);
-                }
+            // 计算总大小
+            let totalLength = 0;
+            for (let i = 0; i < testFrames.length; i++) {
+              totalLength += testFrames[i].length;
             }
 
-            // 按钮事件处理
-            recordButton.addEventListener('click', () => {
-                if (recordingManager.isRecording) {
-                    recordingManager.stop();
-                } else {
-                    if (!referenceText.value.trim()) {
-                        alert('请输入参考文本');
-                        return;
-                    }
-                    socketManager.connect();
-                    recordingManager.start();
-                }
-            });
-            
-            // 新增：播放按钮事件
-            playButton.addEventListener('click', togglePlay);
-            
-            // 新增：下载按钮事件
-            downloadButton.addEventListener('click', downloadAudio);
-            
-            // 新增：进度条点击事件
-            progressBarContainer.addEventListener('click', seekToPosition);
+            // 创建合并缓冲区
+            const mergedPcm = new Int16Array(totalLength);
 
-            // 页面卸载时清理资源
-            window.addEventListener('beforeunload', () => {
-                recordingManager.cleanup();
-                socketManager.close();
-                
-                // 释放音频资源
-                if (audioElement) {
-                    audioElement.pause();
-                    audioElement = null;
-                }
-                
-                if (audioUrl) {
-                    URL.revokeObjectURL(audioUrl);
-                    audioUrl = null;
-                }
+            // 复制所有帧数据
+            let offset = 0;
+            for (let i = 0; i < testFrames.length; i++) {
+              mergedPcm.set(testFrames[i], offset);
+              offset += testFrames[i].length;
+            }
+
+            // 创建WAV文件
+            const wavBlob = createWavBlob(mergedPcm, send_pcmSampleRate);
+
+            // 创建URL并设置
+            if (audioUrl.value) {
+              URL.revokeObjectURL(audioUrl.value);
+            }
+            audioUrl.value = URL.createObjectURL(wavBlob);
+
+            console.log(
+              `已合并 ${testFrames.length} 帧音频数据，总采样点: ${totalLength}`
+            );
+          }
+
+          // 创建WAV Blob
+          function createWavBlob(pcmData, sampleRate) {
+            // WAV文件头
+            const WAV_HEADER_SIZE = 44;
+            const dataSize = pcmData.length * 2; // 16bit = 2 bytes per sample
+            const fileSize = WAV_HEADER_SIZE + dataSize;
+
+            // 创建ArrayBuffer和DataView
+            const buffer = new ArrayBuffer(fileSize);
+            const view = new DataView(buffer);
+
+            // 写入WAV头
+            // "RIFF"
+            view.setUint8(0, 0x52);
+            view.setUint8(1, 0x49);
+            view.setUint8(2, 0x46);
+            view.setUint8(3, 0x46);
+
+            // 文件大小
+            view.setUint32(4, fileSize - 8, true);
+
+            // "WAVE"
+            view.setUint8(8, 0x57);
+            view.setUint8(9, 0x41);
+            view.setUint8(10, 0x56);
+            view.setUint8(11, 0x45);
+
+            // "fmt "
+            view.setUint8(12, 0x66);
+            view.setUint8(13, 0x6d);
+            view.setUint8(14, 0x74);
+            view.setUint8(15, 0x20);
+
+            // 子块大小: 16
+            view.setUint32(16, 16, true);
+
+            // 音频格式: 1 (PCM)
+            view.setUint16(20, 1, true);
+
+            // 通道数: 1 (单声道)
+            view.setUint16(22, 1, true);
+
+            // 采样率
+            view.setUint32(24, sampleRate, true);
+
+            // 字节率 = 采样率 * 通道数 * 采样位数 / 8
+            view.setUint32(28, (sampleRate * 1 * 16) / 8, true);
+
+            // 块对齐 = 通道数 * 采样位数 / 8
+            view.setUint16(32, (1 * 16) / 8, true);
+
+            // 采样位数: 16
+            view.setUint16(34, 16, true);
+
+            // "data"
+            view.setUint8(36, 0x64);
+            view.setUint8(37, 0x61);
+            view.setUint8(38, 0x74);
+            view.setUint8(39, 0x61);
+
+            // 数据大小
+            view.setUint32(40, dataSize, true);
+
+            // 写入PCM数据
+            for (let i = 0; i < pcmData.length; i++) {
+              view.setInt16(WAV_HEADER_SIZE + i * 2, pcmData[i], true);
+            }
+
+            return new Blob([buffer], { type: "audio/wav" });
+          }
+
+          let recorder = null;
+
+          let wave;
+          let clearBufferIdx = 0;
+          let processTime = 0;
+
+          function openRecorder(callback) {
+            recorder = Recorder({
+              type: "unknown", // 使用unknown格式，方便清理内存
+              sampleRate: testSampleRate,
+              bitRate: testBitRate,
+              onProcess: function (
+                buffers,
+                powerLevel,
+                bufferDuration,
+                bufferSampleRate,
+                newBufferIdx,
+                asyncEnd
+              ) {
+                // 录音实时回调
+                wave &&
+                  wave.input(
+                    buffers[buffers.length - 1],
+                    powerLevel,
+                    bufferSampleRate
+                  );
+
+                // 推入实时处理
+                realTimeSendTry(buffers, bufferSampleRate, false);
+              },
             });
-            
-            // 窗口大小改变时重新绘制音频可视化
-            window.addEventListener('resize', () => {
-                if (recordingManager.isRecording && audioVisualizer) {
-                    const canvasCtx = audioVisualizer.getContext('2d');
-                    audioVisualizer.width = audioVisualizer.offsetWidth;
-                    audioVisualizer.height = audioVisualizer.offsetHeight;
-                    canvasCtx.fillStyle = 'rgb(230, 230, 230)';
-                    canvasCtx.fillRect(0, 0, audioVisualizer.width, audioVisualizer.height);
+            recorder.open(
+              function () {
+                if (Recorder.WaveView)
+                  wave = Recorder.WaveView({ elem: ".recwave" });
+                inited.value = true;
+                callback && callback();
+              },
+              function (msg, isUserNotAllow) {
+                console.log(
+                  (isUserNotAllow ? "UserNotAllow，" : "") + "无法录音:" + msg
+                );
+              }
+            );
+          }
+
+          onMounted(() => {
+            // 页面加载时尝试连接WebSocket
+            connectWebSocket();
+          });
+
+          onUnmounted(() => {
+            recorder.close();
+            recorder = null;
+
+            // 清除重连计时器
+            if (reconnectTimeout) {
+              clearTimeout(reconnectTimeout);
+              reconnectTimeout = null;
+            }
+
+            // 断开WebSocket连接
+            if (socket) {
+              if (socket.readyState === WebSocket.OPEN) {
+                socket.close(1000, "页面卸载");
+              } else {
+                socket = null;
+              }
+            }
+          });
+
+          // 建立WebSocket连接
+          function connectWebSocket() {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+              return; // 已经连接
+            }
+
+            // 清除之前的重连计时器
+            if (reconnectTimeout) {
+              clearTimeout(reconnectTimeout);
+              reconnectTimeout = null;
+            }
+
+            wsStatus.value = "正在连接...";
+
+            const protocol =
+              window.location.protocol === "https:" ? "wss:" : "ws:";
+            socket = new WebSocket(
+              `${protocol}//${window.location.host}/ws/assessment`
+            );
+
+            socket.onopen = function () {
+              wsStatus.value = "已连接到服务器";
+              console.log("WebSocket连接已建立");
+              reconnectAttempts = 0; // 重置重连尝试次数
+            };
+
+            socket.onmessage = function (event) {
+              const data = JSON.parse(event.data);
+              console.log("收到服务器消息:", data);
+
+              // 处理服务器返回的不同状态
+              processServerMessage(data);
+            };
+
+            socket.onclose = function (event) {
+              const wasClean = event.wasClean;
+              const code = event.code;
+
+              if (wasClean) {
+                wsStatus.value = "与服务器断开连接";
+                console.log(`WebSocket连接已关闭，代码: ${code}`);
+              } else {
+                wsStatus.value = `连接异常断开 (${code})`;
+                console.error(`WebSocket连接异常断开，代码: ${code}`);
+                scheduleReconnect(); // 非正常关闭时尝试重连
+              }
+            };
+
+            socket.onerror = function (error) {
+              wsStatus.value = "连接错误";
+              console.error("WebSocket错误:", error);
+              scheduleReconnect(); // 发生错误时尝试重连
+            };
+          }
+
+          // 安排重新连接
+          function scheduleReconnect() {
+            if (reconnectAttempts < maxReconnectAttempts) {
+              reconnectAttempts++;
+              wsStatus.value = `连接失败，${
+                reconnectInterval / 1000
+              }秒后第${reconnectAttempts}次重试...`;
+
+              reconnectTimeout = setTimeout(() => {
+                console.log(
+                  `尝试重新连接 (${reconnectAttempts}/${maxReconnectAttempts})...`
+                );
+                connectWebSocket();
+              }, reconnectInterval);
+            } else {
+              wsStatus.value = "连接失败，请刷新页面重试";
+              console.error(
+                `重连失败，已达到最大尝试次数(${maxReconnectAttempts})`
+              );
+            }
+          }
+
+          // 发送配置信息到服务器
+          function sendConfig() {
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+              return;
+            }
+
+            const config = {
+              type: "config",
+              ref_text: textToRead.value.trim(),
+              server_engine_type: "16k_en", // 默认16k英文引擎
+              sampleRate: testSampleRate,
+              bitRate: testBitRate,
+            };
+
+            if (config.ref_text) {
+              socket.send(JSON.stringify(config));
+              console.log("发送配置信息:", config);
+            }
+          }
+
+          // 处理服务器消息
+          function processServerMessage(data) {
+            console.log("收到服务器消息:", data);
+
+            switch (data.status) {
+              case "start":
+                status.value = "开始评测...";
+                loading.value = true;
+                loadingProgress.value = 20;
+                break;
+
+              case "intermediate":
+                // 更新中间结果
+                if (data.result) {
+                  updateResults(data.result);
                 }
+                status.value = "正在分析...";
+                loadingProgress.value = 60;
+                break;
+
+              case "complete":
+                // 更新最终结果
+                if (data.result) {
+                  updateResults(data.result);
+                }
+                status.value = "评测完成";
+                loading.value = false;
+                loadingProgress.value = 100;
+
+                // 显示结果区域
+                hasResults.value = true;
+                break;
+
+              case "error":
+                console.error("评测错误:", data.error);
+                status.value = `错误: ${data.error}`;
+                loading.value = false;
+                loadingProgress.value = 0;
+                hasResults.value = false;
+                break;
+            }
+          }
+
+          // 更新评测结果
+          function updateResults(result) {
+            // 如果无结果数据，则直接返回
+            if (!result) return;
+
+            // 安全更新分数
+            const updateScore = (ref, value) => {
+              if (value !== undefined && !isNaN(value) && isFinite(value)) {
+                ref.value = parseFloat(value).toFixed(1);
+              } else {
+                ref.value = 0;
+              }
+            };
+
+            // 更新分数
+            updateScore(overallScore, result.overall_score);
+            updateScore(pronunciationScore, result.pron_accuracy);
+            updateScore(fluencyScore, result.pron_fluency);
+
+            // 更新单词分析
+            if (result.words && result.words.length > 0) {
+              updateWordAnalysis(result.words);
+            }
+          }
+
+          // 获取分数等级的样式类
+          function getScoreClass(score) {
+            if (score >= 90) return "excellent";
+            if (score >= 80) return "good";
+            if (score >= 60) return "average";
+            return "poor";
+          }
+
+          // 更新单词分析结果
+          function updateWordAnalysis(words) {
+            wordAnalysis.value = words.map((word) => {
+              const scoreValue = parseFloat(word.S || 0);
+              return {
+                text: word.W, // 单词文本
+                phonetic: word.P, // 音标
+                score: scoreValue.toFixed(1), // 得分
+                scoreClass: getScoreClass(scoreValue), // 得分等级样式
+                isCorrect: scoreValue >= 80, // 判断是否正确
+                suggestion: word.P || "", // 使用音标作为建议
+              };
             });
-        });
+
+            // 设置数据已准备好，触发视图更新
+            hasResults.value = true;
+          }
+
+          // 录音功能
+          function toggleRecording() {
+            if (isRecording.value) {
+              // 停止录音
+              isRecording.value = false;
+              status.value = "录音已完成";
+
+              // 停止录音并发送最后一帧数据
+              realTimeSendTry([], 0, true);
+
+              recorder.close();
+              recorder = null;
+
+              // 评测现在由服务器控制
+              status.value = "等待评测结果...";
+              loading.value = true;
+              loadingProgress.value = 30;
+            } else {
+              // 开始录音
+              if (!textToRead.value.trim()) {
+                alert("请先输入需要朗读的文本");
+                return;
+              }
+              openRecorder(() => {
+                // 确保WebSocket连接
+                if (!socket || socket.readyState !== WebSocket.OPEN) {
+                  connectWebSocket();
+                }
+
+                // 重置录音环境
+                realTimeSendReset();
+
+                isRecording.value = true;
+                status.value = "正在录音...";
+                audioUrl.value = "";
+                hasResults.value = false;
+
+                // 开始录音
+                if (inited.value) {
+                  sendConfig();
+                  recorder.start();
+                }
+              });
+            }
+          }
+
+          // 上传模拟功能（不再需要，被实时传输替代）
+          function sendAudioForAssessment(blob, text) {
+            console.log("不再需要此函数，已被实时传输替代");
+          }
+
+          // 发送音频数据（不再需要，被实时传输替代）
+          function sendAudioData(blob, text) {
+            console.log("不再需要此函数，已被实时传输替代");
+          }
+
+          // 模拟评测过程 - 修改为仅在没有WebSocket连接时使用
+          function startEvaluation() {
+            // 如果连接到WebSocket，评测过程由服务器控制
+            if (socket && socket.readyState === WebSocket.OPEN) {
+              return;
+            }
+
+            // 否则使用模拟评测流程
+            status.value = "开始评测...";
+            loading.value = true;
+            loadingProgress.value = 0;
+
+            const interval = setInterval(() => {
+              loadingProgress.value += 10;
+              if (loadingProgress.value >= 100) {
+                clearInterval(interval);
+                loading.value = false;
+                status.value = "评测完成";
+                showResults();
+              }
+            }, 300);
+          }
+
+          // 模拟显示结果
+          function showResults() {
+            hasResults.value = true;
+            overallScore.value = Math.floor(Math.random() * 31) + 70; // 70-100
+            pronunciationScore.value = Math.floor(Math.random() * 31) + 70;
+            fluencyScore.value = Math.floor(Math.random() * 31) + 70;
+
+            // 模拟词语分析
+            const words = textToRead.value.split(" ");
+            wordAnalysis.value = words.map((word) => {
+              const isCorrect = Math.random() > 0.3;
+              return {
+                text: word,
+                isCorrect,
+                suggestion: isCorrect ? "" : word + "'",
+              };
+            });
+          }
+
+          return {
+            textToRead,
+            isRecording,
+            audioUrl,
+            status,
+            loading,
+            loadingProgress,
+            hasResults,
+            overallScore,
+            pronunciationScore,
+            fluencyScore,
+            wordAnalysis,
+            toggleRecording,
+            wsStatus,
+            enableMergeFrames,
+          };
+        },
+      }).mount("#app");
     </script>
-</body>
+  </body>
 </html>
