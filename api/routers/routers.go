@@ -10,7 +10,7 @@ func Load(e *echo.Echo) *echo.Echo {
 
 	e.Static("/", "public")
 
-	e.GET("/ws/assessment", handler.HandleWebSocket)
+	e.GET("/ws/assessment", handler.StreamAssessment)
 
 	return e
 }

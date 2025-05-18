@@ -12,6 +12,7 @@ import (
 	"unicode"
 
 	"lingolift/config"
+	"lingolift/pkg/speech"
 
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
@@ -27,138 +28,12 @@ var (
 	}
 )
 
-type AssessmentRequest struct {
-	RefText          string  `json:"ref_text" validate:"required"`
-	ServerEngineType string  `json:"server_engine_type" default:"16k_en"`
-	ScoreCoeff       float64 `json:"score_coeff" default:"1.1"`
-	EvalMode         int64   `json:"eval_mode" default:"0"`
-	TextMode         int64   `json:"text_mode" default:"0"`
-	IsSaveAudioFile  bool    `json:"is_save_audio_file" default:"false"`
-}
-
-type AssessmentResponse struct {
-	Status string     `json:"status"`
-	Result *SOEResult `json:"result,omitempty"`
-	Error  string     `json:"error,omitempty"`
-}
-
-type SOEResult struct {
-	OverallScore   float64       `json:"overall_score,omitempty"`
-	Words          []soe.WordRsp `json:"words,omitempty"`
-	PronAccuracy   float64       `json:"pron_accuracy,omitempty"`
-	PronFluency    float64       `json:"pron_fluency,omitempty"`
-	PronCompletion float64       `json:"pron_completion,omitempty"`
-}
-
-type StreamListener struct {
-	Conn       *websocket.Conn
-	ResultChan chan *SOEResult
-	ErrorChan  chan error
-	Complete   chan struct{}
-}
-
-func NewStreamListener(conn *websocket.Conn) *StreamListener {
-	return &StreamListener{
-		Conn:       conn,
-		ResultChan: make(chan *SOEResult, 10),
-		ErrorChan:  make(chan error, 1),
-		Complete:   make(chan struct{}),
-	}
-}
-
-func (l *StreamListener) OnRecognitionStart(response *soe.SpeakingAssessmentResponse) {
-	log.Printf("OnRecognitionStart: %s", response.VoiceID)
-	l.sendResponse("start", nil, nil)
-}
-
-func (l *StreamListener) OnIntermediateResults(response *soe.SpeakingAssessmentResponse) {
-	log.Printf("OnIntermediateResults: 整体得分=%.2f, 准确率=%.2f, 流畅度=%.2f",
-		response.Result.SuggestedScore,
-		response.Result.PronAccuracy,
-		response.Result.PronFluency)
-
-	if len(response.Result.Words) > 0 {
-		result := &SOEResult{
-			OverallScore:   response.Result.SuggestedScore,
-			Words:          response.Result.Words,
-			PronAccuracy:   response.Result.PronAccuracy,
-			PronFluency:    response.Result.PronFluency,
-			PronCompletion: response.Result.PronCompletion,
-		}
-		l.ResultChan <- result
-		l.sendResponse("intermediate", result, nil)
-	}
-}
-
-func (l *StreamListener) OnRecognitionComplete(response *soe.SpeakingAssessmentResponse) {
-	log.Printf("语音识别评测结果完成: 整体得分=%.2f, 准确率=%.2f, 流畅度=%.2f",
-		response.Result.SuggestedScore,
-		response.Result.PronAccuracy,
-		response.Result.PronFluency)
-
-	if len(response.Result.Words) > 0 {
-		result := &SOEResult{
-			OverallScore:   response.Result.SuggestedScore,
-			Words:          response.Result.Words,
-			PronAccuracy:   response.Result.PronAccuracy,
-			PronFluency:    response.Result.PronFluency,
-			PronCompletion: response.Result.PronCompletion,
-		}
-		l.ResultChan <- result
-		l.sendResponse("complete", result, nil)
-	}
-
-	close(l.Complete)
-}
-
-func (l *StreamListener) OnFail(response *soe.SpeakingAssessmentResponse, err error) {
-	log.Printf("OnFail: %v", err)
-	l.ErrorChan <- err
-	l.sendResponse("error", nil, err)
-	close(l.Complete)
-}
-
-func (l *StreamListener) sendResponse(status string, result *SOEResult, err error) {
-	log.Println("准备发送响应:", status)
-	if l.Conn == nil {
-		log.Println("WebSocket connection is nil")
-		return
-	}
-
-	// 使用写锁防止并发写入
-	l.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-	defer l.Conn.SetWriteDeadline(time.Time{})
-
-	response := AssessmentResponse{
-		Status: status,
-		Result: result,
-	}
-	if err != nil {
-		response.Error = err.Error()
-	}
-
-	if err := l.Conn.WriteJSON(response); err != nil {
-		if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
-			log.Println("WebSocket closed normally")
-		} else if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-			log.Printf("Unexpected WebSocket close: %v", err)
-		} else {
-			log.Printf("WebSocket write error: %v", err)
-		}
-	}
-}
-
 type EndMessage struct {
 	Type string `json:"type"`
 }
 
-// 生成唯一文件名
-func generateUniqueFilename(mimeType string) string {
-	timestamp := time.Now().Format("20060102150405")
-	return fmt.Sprintf("audio_%s.wav", timestamp)
-}
-
-func HandleWebSocket(c echo.Context) error {
+// StreamAssessment
+func StreamAssessment(c echo.Context) error {
 	// 升级HTTP连接为WebSocket连接
 	conn, err := upgrader.Upgrade(c.Response(), c.Request(), nil)
 	if err != nil {
@@ -183,10 +58,10 @@ func HandleWebSocket(c echo.Context) error {
 	}
 
 	// 解析配置
-	var req AssessmentRequest
+	var req speech.AssessmentRequest
 	if err = json.Unmarshal(message, &req); err != nil {
 		log.Printf("Parse config error: %v", err)
-		conn.WriteJSON(AssessmentResponse{
+		conn.WriteJSON(speech.AssessmentResponse{
 			Status: "error",
 			Error:  "Invalid configuration",
 		})
@@ -205,7 +80,7 @@ func HandleWebSocket(c echo.Context) error {
 		req.RefText, req.ServerEngineType, req.EvalMode, req.ScoreCoeff)
 
 	// 创建流式监听器
-	listener := NewStreamListener(conn)
+	listener := speech.NewStreamListener(conn)
 
 	// 认证信息
 	credential := common.NewCredential(config.G.Speech.SecretID, config.G.Speech.SecretKey)
@@ -223,7 +98,7 @@ func HandleWebSocket(c echo.Context) error {
 	log.Println("准备启动识别器...")
 	if err = recognizer.Start(); err != nil {
 		log.Printf("Recognizer start error: %v", err)
-		conn.WriteJSON(AssessmentResponse{
+		conn.WriteJSON(speech.AssessmentResponse{
 			Status: "error",
 			Error:  err.Error(),
 		})
@@ -337,7 +212,12 @@ func HandleWebSocket(c echo.Context) error {
 	}
 }
 
-// isSentence
+// 生成唯一文件名
+func generateUniqueFilename(mimeType string) string {
+	timestamp := time.Now().Format("20060102150405")
+	return fmt.Sprintf("audio_%s.wav", timestamp)
+}
+
 func isSentence(s string) bool {
 	// 检查是否包含句子分隔符
 	if strings.ContainsAny(s, ".?!") {
